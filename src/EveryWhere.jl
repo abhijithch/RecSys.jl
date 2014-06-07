@@ -1,6 +1,5 @@
 
-@everywhere function gatherItemMatrix(remoteRefOfItemMatrix::Array, noOfWorkers)
-	#Gather ItemMatrix from all processors to local processors
+function gatherItemMatrix(remoteRefOfItemMatrix::Array, noOfWorkers)	
 	fullItemMatrix = Array{Float64,2}
     for k in 1:noOfWorkers
     	if k==1			    		    		
@@ -12,7 +11,7 @@
     return fullItemMatrix
 end	
 
-@everywhere function gatherUserMatrix(remoteRefOfUserMatrix::Array, noOfWorkers)
+ function gatherUserMatrix(remoteRefOfUserMatrix::Array, noOfWorkers)
 	uMatrix = Array{Float64,2}
     for k in 1:noOfWorkers
     	if k == 1
@@ -24,38 +23,26 @@ end
     return uMatrix
 end
 
-@everywhere function findU(remoteRefOfTraningDataByRow::RemoteRef, remoteRefOfItemMatrix::Array, noOfWorkers::Int32, noOfUsers)												   
+ function findU(remoteRefOfTraningDataByRow::RemoteRef, remoteRefOfItemMatrix::Array, noOfWorkers::Int32, noOfUsers)												   
 
 	fullItemMatrix = gatherItemMatrix(remoteRefOfItemMatrix, noOfWorkers)
-    fullItemMatrix = fullItemMatrix'			    			   
-    #println("fullItemMatrix",fullItemMatrix)
-	ratingMatrix = fetch(remoteRefOfTraningDataByRow)
-    #println("ratingMatrix",ratingMatrix)
-    #println("size(ratingMatrix)",size(ratingMatrix))
-	xMatrix = Array(Float64, size(ratingMatrix)[1], noOfUsers)
-	println("xMatrix size",size(xMatrix))
+    fullItemMatrix = fullItemMatrix'			    			       
+	ratingMatrix = fetch(remoteRefOfTraningDataByRow)    
+	xMatrix = Array(Float64, size(ratingMatrix)[1], noOfUsers)	
+
 	for r = 1:size(ratingMatrix)[1]		
 		ratingMatrixTranspose = (ratingMatrix[r,:])'									
-    	items=find(ratingMatrixTranspose)  			    			   			    				    	
-        #println("ratingMatrixTranspose",ratingMatrixTranspose)
-        #println("items",items)
-        #println("fullItemMatrix[:,items]",fullItemMatrix[:,items])
-    	vector = (fullItemMatrix[:,items] ) * full(ratingMatrixTranspose)[items]
-        #println("size of vector",size(vector))
-    	matrix=(fullItemMatrix[:,items]*(fullItemMatrix[:,items])')			    				    	    	
-        #println("size of matrix",size(matrix))
-        #println("size of xMatrix",size(xMatrix))
-        #println("matrix-vector   ",matrix\vector)
-        #println("size matrix-vector  ",size(matrix\vector ))
+    	items=find(ratingMatrixTranspose)  			    			   			    				    	        
+    	vector = (fullItemMatrix[:,items] ) * full(ratingMatrixTranspose)[items]        
+    	matrix=(fullItemMatrix[:,items]*(fullItemMatrix[:,items])')			    				    	    	        
     	xMatrix[r,:]=matrix\vector           			    
     end    
     xMatrix
 end	
 
-@everywhere function findM(remoteRefOfTraningDataByColumn::RemoteRef, remoteRefOfUserMatrix::Array, noOfWorkers::Int32, noOfUsers)				
+ function findM(remoteRefOfTraningDataByColumn::RemoteRef, remoteRefOfUserMatrix::Array, noOfWorkers::Int32, noOfUsers)				
 	
 	uMatrix = gatherUserMatrix(remoteRefOfUserMatrix, noOfWorkers)
-
 	ratingMatrix = fetch(remoteRefOfTraningDataByColumn)				
 	xMatrix = Array(Float64, noOfUsers, size(ratingMatrix)[2])
 	

@@ -2,7 +2,7 @@ using Lumberjack
 
 
 logLM = Lumberjack.LumberMill()
-add_truck(logLM, LumberjackTruck("/home/thiruk/JuliaREC/ALS_PG/JuliaRecSys.jl/mylogfile.log","info"), "my-file-logger")
+add_truck(logLM, LumberjackTruck("../alsfactorization.log","info"), "my-file-logger")
 function loadData(fileLocation::String, fileSeparator::Char)
 	try
 		#Lumberjack.info(logLM,"loadData() method",{"fileLocation"=>fileLocation ,"fileSeparator"=>fileSeparator})
@@ -11,7 +11,7 @@ function loadData(fileLocation::String, fileSeparator::Char)
 			return
 		end
 		#Lumberjack.info(logLM,"loadData() method",{"file size"=>filesize(fileLocation)})		
-		data = readdlm(fileLocation, fileSeparator; has_header=false)
+		data = readdlm(fileLocation, fileSeparator; header=false)
 		#Lumberjack.info(logLM,"loadData() method",{"data"=>data})	
 		userColumn = int(data[:,1])
 		itemColumn = int(data[:,2])
