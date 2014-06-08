@@ -1,7 +1,7 @@
 using Lumberjack 
 
 logLM = Lumberjack.LumberMill()
-add_truck(logLM, LumberjackTruck("/home/thiruk/.julia/JuliaRecSys/mylogfile.log","info"), "my-file-logger")
+add_truck(logLM, LumberjackTruck("mylogfile.log","info"), "my-file-logger")
 
 function ALSFactorization(trainingData::SparseMatrixCSC, numberOfFeatures::Int32, noOfIterations::Int32)
 		
