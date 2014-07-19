@@ -1,5 +1,13 @@
 module JuliaRecSys
 
-# package code goes here
+using Lumberjack 
 
-end # module
+export ALSFactorization, loadData
+
+println("Welcome to ALSFactorization")
+include("LoadData.jl")
+include("Utilities.jl")
+include("EveryWhere.jl")
+include("ALSFactorization.jl")
+
+end
