@@ -124,8 +124,8 @@ end
 
 
 
-PrintFactorNames(1,3)
+PrintFactorNames(M,1,3)
 
-PrintFactorNames(2,3)
+PrintFactorNames(M,2,3)
 
-PrintFactorNames(3,3)
+PrintFactorNames(M,3,3)
