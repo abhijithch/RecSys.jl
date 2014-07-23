@@ -25,7 +25,7 @@ function filterNonParticipatingUsersAndItems(trainingData::SparseMatrixCSC)
 	trainingData=trainingData[:,ratedItems]
 end
 
-function initializeItemMatrix(trainingData, noOfItems::Int32, numberOfFeatures::Int32)
+function initializeItemMatrix(trainingData, noOfItems, numberOfFeatures)
 	
 	# itemMatrix = rand(noOfItems,numberOfFeatures-1)	
 	# FirstRow=zeros(Float64,noOfItems)
@@ -44,7 +44,7 @@ function initializeItemMatrix(trainingData, noOfItems::Int32, numberOfFeatures::
 
 end
 
-function distributeMatrixByColumn(matrix, noOfWorkers::Int32, totalSize::Int32)
+function distributeMatrixByColumn(matrix, noOfWorkers, totalSize)
 	remoteRefOfMatrix = Array(RemoteRef,noOfWorkers)
 
 	minColumnPerProc = floor(totalSize/noOfWorkers)
@@ -61,7 +61,7 @@ function distributeMatrixByColumn(matrix, noOfWorkers::Int32, totalSize::Int32)
 	return remoteRefOfMatrix
 end
 
-function distributeMatrixByRow(matrix, noOfWorkers::Int32, totalSize::Int32)
+function distributeMatrixByRow(matrix, noOfWorkers, totalSize)
 	remoteRefOfMatrix = Array(RemoteRef,noOfWorkers)
 
 	minRowPerProc = floor(totalSize/noOfWorkers)
