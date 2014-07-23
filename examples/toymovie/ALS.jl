@@ -90,10 +90,16 @@ println(round(M*10))
     setindex!(ItemsDict,I[i,2],int(I[i,1]))
  end
 
-function PrintFactorNames(rowID::Int64,num::Int64)
-    sortedn = sortcols(a,by=x->(x[rowID+1]))
+function AddIndices(matrix)
+    matrixwithindex = [[1:8]',M]
+    return matrixwithindex
+end
+
+function PrintFactorNames(matrix,rowID::Int64,num::Int64)
+    matrixwithindex = AddIndices(matrix)
+    sortedn = sortcols(matrixwithindex,by=x->(x[rowID+1]))
     topn = sortedn[1,1:num]
-    bottomn = sortedn[1,m-num:m]
+    bottomn = sortedn[1,m-num+1:m]
     PrintNames(topn,bottomn,rowID)
     #return topn,bottomn
 end
@@ -118,8 +124,8 @@ end
 
 
 
-PrintFactorNames(1,2)
+PrintFactorNames(1,3)
 
-PrintFactorNames(2,2)
+PrintFactorNames(2,3)
 
-PrintFactorNames(3,2)
+PrintFactorNames(3,3)
