@@ -32,7 +32,7 @@ R=tempR
 R_t=R'
 (n_u,n_m)=size(R)
 lambda = 0.065
-N_f = 2
+N_f = 3
 MM = rand(n_m,N_f-1)
 FirstRow=zeros(Float64,n_m)
 for i=1:n_m
@@ -49,19 +49,19 @@ noIters=30
 
 for i=1:noIters
     for u=1:n_u
-    	#println(u)    	
-        movies=find(R_t[:,u])  
-        M_u=M[:,movies] 
+    	#println(u)
+        movies=find(R_t[:,u])
+        M_u=M[:,movies]
         vector=M_u*full(R_t[movies,u])
         matrix=(M_u*M_u')+locWtU[u]*LamI
         x=matrix\vector
         U[u,:]=x
         #println(round(x,2))
-    end        
+    end
   #println(i)
-    for m=1:n_m      
+    for m=1:n_m
     	#println(m)
-  	users=find(R[:,m])      
+  	users=find(R[:,m])
         U_m=U[users,:]
         vector=U_m'*full(R[users,m])
         matrix=(U_m'*U_m)+locWtM[m]*LamI
@@ -70,21 +70,20 @@ for i=1:noIters
         M[:,m]=x
      end
 
-end 
+end
 
 println(round(U*10))
 println(round(M*10))
 
  # Adding Indices
  a = [[1:8]',M]
- 
 
 
  sorted1 = sortcols(a,by=x->(x[2]))
  sorted2 = sortcols(a,by=x->(x[3]))
 
  ItemsDict = Dict()
- 
+
  (m,n) = size(I)
 
  for i=1:m
@@ -95,29 +94,32 @@ function PrintFactorNames(rowID::Int64,num::Int64)
     sortedn = sortcols(a,by=x->(x[rowID+1]))
     topn = sortedn[1,1:num]
     bottomn = sortedn[1,m-num:m]
-    PrintNames(topn,bottomn)
+    PrintNames(topn,bottomn,rowID)
     #return topn,bottomn
-end    
+end
 
 function ItemName(ItemID::Int64)
-    return ItemsDict[ItemID] 
+    return ItemsDict[ItemID]
 end
 
-function PrintNames(top,bottom)
+function PrintNames(top,bottom,factorID)
+    println("Factor ",factorID)
     for i=1:length(top)
+        @printf "%4.3f " a[factorID+1, int(top[i])]
         println(ItemName(int(top[i])))
     end
-    println(".....")
-        for i=1:length(bottom)
+    println("...")
+    for i=1:length(bottom)
+        @printf "%4.3f " a[factorID+1, int(bottom[i])]
         println(ItemName(int(bottom[i])))
     end
-    println(".....")
+    println()
 end
 
 
 
-PrintFactorNames(1,4)
+PrintFactorNames(1,2)
 
-PrintFactorNames(2,4)
+PrintFactorNames(2,2)
 
-
+PrintFactorNames(3,2)
