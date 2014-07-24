@@ -46,6 +46,7 @@ function ALSFactorization(trainingData::SparseMatrixCSC, numberOfFeatures::Int64
 	UserMatrix = gatherUserMatrix(remoteRefOfUserMatrix, noOfWorkers)
 	#UserMatrix * ItemMatrix'
 	#Lumberjack.info(logLM,"loadData() method","here")
-	return (UserMatrix, ItemMatrix)
-	
+#	return (UserMatrix, ItemMatrix)
+	return ItemMatrix
+
 end
