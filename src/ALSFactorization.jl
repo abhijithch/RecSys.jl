@@ -1,18 +1,13 @@
-using Lumberjack 
-
-logLM = Lumberjack.LumberMill()
-add_truck(logLM, LumberjackTruck("mylogfile.log","info"), "my-file-logger")
-
-function ALSFactorization(trainingData::SparseMatrixCSC, numberOfFeatures::Int64, noOfIterations::Int64)
+function ALSFactorization(trainingData::SparseMatrixCSC, numberOfFeatures, noOfIterations)
 		
 	trainingData = filterNonParticipatingUsersAndItems(trainingData)
 	#println(trainingData)
 	trainingDataTranspose = trainingData'
 	(noOfUsers, noOfItems) = size(trainingData)		
 	noOfWorkers = nprocs()-1
-	if noOfWorkers == 0
-		return
-	end
+	# if noOfWorkers == 0
+	# 	return
+	# end
 
 	# if noOfUsers < noOfWorkers | noOfItems < noOfWorkers
 	# 	return
