@@ -29,5 +29,7 @@ julia> x = ALSFactorization(a, 10, 1)
 
 # Reporting Bugs
 
+https://github.com/abhi123link/JuliaRecSys.jl/issues
+
 # How to contribute
 
