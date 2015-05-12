@@ -23,7 +23,7 @@ end
     return uMatrix
 end
 
- function findU(remoteRefOfTraningDataByRow::RemoteRef, remoteRefOfItemMatrix::Array, noOfWorkers::Int32, noOfUsers)												   
+ function findU(remoteRefOfTraningDataByRow::RemoteRef, remoteRefOfItemMatrix::Array, noOfWorkers::Int64, noOfUsers)												   
 
 	fullItemMatrix = gatherItemMatrix(remoteRefOfItemMatrix, noOfWorkers)
     fullItemMatrix = fullItemMatrix'			    			       
@@ -40,7 +40,7 @@ end
     xMatrix
 end	
 
- function findM(remoteRefOfTraningDataByColumn::RemoteRef, remoteRefOfUserMatrix::Array, noOfWorkers::Int32, noOfUsers)				
+ function findM(remoteRefOfTraningDataByColumn::RemoteRef, remoteRefOfUserMatrix::Array, noOfWorkers::Int64, noOfUsers)				
 	
 	uMatrix = gatherUserMatrix(remoteRefOfUserMatrix, noOfWorkers)
 	ratingMatrix = fetch(remoteRefOfTraningDataByColumn)				
