@@ -1,7 +1,5 @@
 module JuliaRecSys
 
-using Lumberjack 
-
 export ALSFactorization, loadData
 
 println("Welcome to ALSFactorization")

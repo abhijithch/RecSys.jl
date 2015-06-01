@@ -26,7 +26,6 @@ function filterNonParticipatingUsersAndItems(trainingData::SparseMatrixCSC)
 end
 
 function initializeItemMatrix(trainingData, noOfItems::Int64, numberOfFeatures::Int64)
-	
 	# itemMatrix = rand(noOfItems,numberOfFeatures-1)	
 	# FirstRow=zeros(Float64,noOfItems)
 
