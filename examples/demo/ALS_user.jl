@@ -106,6 +106,6 @@ function recommend(user,n)
     # To Do: remove the intersection of seen movies.  
     movie_names = readdlm("movies.csv",'\,')
     #println(movie_names[[collect(unseen_top)[1:n,:][:]],2])
-    println(movie_names[top[1:n,:][:],2])
+    movie_names[top[1:n,:][:],2]
 end
 
