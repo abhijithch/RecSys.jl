@@ -79,5 +79,5 @@ function recommend(user,n)
     m = find(R[user,:])    
     unseen_top = setdiff(Set(top),Set(m))
     movie_names = readdlm("movies.csv",'\,')
-    println(movie_names[[collect(unseen_top)[1:n,:][:]],2])
+    movie_names[[collect(unseen_top)[1:n,:][:]],2]
 end
