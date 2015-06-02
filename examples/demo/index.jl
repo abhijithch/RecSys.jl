@@ -1,7 +1,20 @@
 include("ALS.jl")
+using JSON
 
-function showmovie(title)
-    fontsize(1.5em, title)
+movie_meta = JSON.parse(readall("movie_info.json"))
+
+getfield(m, x, def="") = get(movie_meta, m, Dict()) |>
+    (d -> get(d, x, def))
+
+function showmovie(m)
+    poster = image(getfield(m, "Poster", "http://uwatch.to/posters/placeholder.png"), alt=m) |>
+        size(120px, 180px)
+    desc = vbox(
+        fontsize(1.5em, m),
+        caption(getfield(m, "Plot")),
+        getfield(m, "Genre")
+        )
+    hbox(poster, hskip(2em), desc)
 end
 
 function main(window)
