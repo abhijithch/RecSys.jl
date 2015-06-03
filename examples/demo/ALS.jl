@@ -32,7 +32,7 @@ R=tempR
 R_t=R'
 (n_u,n_m)=size(R)
 lambda = 0.065
-N_f = 10
+N_f = 9
 MM = rand(n_m,N_f-1)
 FirstRow=zeros(Float64,n_m)
 for i=1:n_m
@@ -80,5 +80,5 @@ function recommend(user,n)
     # unseen_top = setdiff(Set(top),Set(m))
     # To Do: remove the intersection of seen movies.  
     movie_names = readdlm("movies.csv",'\,')
-    movie_names[[collect(unseen_top)[1:n,:][:]],2]
+    movie_names[top[1:n,:][:],2]
 end
