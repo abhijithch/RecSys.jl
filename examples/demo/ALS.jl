@@ -1,18 +1,19 @@
-#A = readdlm("/home/abhijith/Documents/Viral/codes/ml-100k/u1.base.txt",'\t';header=false)
 A = readdlm("u1.base",'\t';header=false)
 I = readdlm("movies.csv",',';header=false)
-#Q = readdlm("/home/abhijith/Documents/Viral/codes/ml-100k/u1.test.txt",'\t';header=false)
 
 userCol = int(A[:,1])
 movieCol = int(A[:,2])
 ratingsCol = int(A[:,3])
 tempR=sparse(userCol,movieCol,ratingsCol)
-
+#println(tempR)
 (n_u,n_m)=size(tempR)
+println(n_u)
+println(n_m)
 tempR_t=tempR'
 
 #Filter out empty movies or users.
 indd_users=trues(n_u)
+println(size(indd_users))
 for u=1:n_u
     movies=find(tempR_t[:,u])
     if length(movies)==0

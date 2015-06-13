@@ -1,0 +1,6 @@
+Pkg.add("HDF5")
+using HDF5, JLD
+t = 15
+z = [1,3]
+save("myfile.jld", "t", t, "arr", z)
+
