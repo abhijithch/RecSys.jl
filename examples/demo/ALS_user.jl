@@ -1,7 +1,10 @@
 
-global n_u=0,n_m=0, N_f = 10
-global U=zeros(n_u,N_f)
-global M=zeros(N_f,n_m)
+n_u=1
+n_m=1
+N_f = 10
+U=zeros(n_u,N_f)
+M=zeros(N_f,n_m)
+R=zeros(n_u,n_m)
 
 # Function to load data from input files. 
 function loaddata()
@@ -16,46 +19,36 @@ function creatematrix()
     movieCol = int(A[:,2])
     ratingsCol = int(A[:,3])
     tempR=sparse(userCol,movieCol,ratingsCol)
-    (n_u,n_m)=size(tempR)
+    (global n_u,global n_m)=size(tempR)
     tempR_t=tempR'
     #Filter out empty movies or users.
-    indd_users=trues(n_u)
-    for u=1:n_u
+    indd_users=trues(global n_u)
+    for u=1:global n_u
     movies=find(tempR_t[:,u])
     if length(movies)==0
        indd_users[u]=false
     end
 
     tempR=tempR[indd_users,:]
-    indd_movies=trues(n_m)
-    for m=1:n_m
+    indd_movies=trues(global n_m)
+    for m=1:global n_m
         users=find(tempR[:,m])
         if length(users)==0
            indd_movies[m]=false
         end
     end
     tempR=tempR[:,indd_movies]
-    R=tempR
+    global R=tempR
     R_t=R'
     return R
-    println("OK")
     end
-end
-
-# Prepare and trigger factorize
-function prepare()
-    factorizeUM(creatematrix())
-end
-
-function prepare(m,r)
-    R =[U,sparse(int(ones(n_m)),m,r)]
-    factorize(R)
 end
 
 # Factorize the rating matrix into U and M
 function factorizeUM(R)
-    (n_u,n_m)=size(R)
+    (global n_u,global n_m)=size(R)
     R_t = R'
+    println(size(R_t))
     lambda = 0.065    
     MM = randn(n_m,N_f-1)
     FirstRow=zeros(Float64,n_m)
@@ -68,7 +61,7 @@ function factorizeUM(R)
     locWtU=sum(II,2)
     locWtM=sum(II,1)
     LamI=lambda*eye(N_f)
-    U=zeros(n_u,N_f)
+    global U=zeros(n_u,N_f)
     noIters=30    
     for i=1:noIters
         for u=1:n_u
@@ -78,7 +71,7 @@ function factorizeUM(R)
             vector=M_u*full(R_t[movies,u])
             matrix=(M_u*M_u')+locWtU[u]*LamI
             x=matrix\vector
-            U[u,:]=x
+            global U[u,:]=x
         end
         for m=1:n_m
             #println(m)
@@ -87,10 +80,24 @@ function factorizeUM(R)
             vector=U_m'*full(R[users,m])
             matrix=(U_m'*U_m)+locWtM[m]*LamI
             x=matrix\vector
-            M[:,m]=x
+            global M[:,m]=x
          end
     end
 end
+
+# Prepare and trigger factorize
+function prepare()
+    global R = creatematrix()
+    println(size(R))
+    factorizeUM(R)
+end
+
+function prepare(m,r)
+    global R =[U,sparse(int(ones(n_m)),m,r)]
+    factorizeUM(R)
+end
+
+
     
 # To Do: Accept a new user, by collecting ratings for around atleast 10 random movies.
 function new_user(m,r)
