@@ -1,5 +1,7 @@
 using DataFrames
 using MLBase
+using Taro
+Taro.init()
 
 # try to follow Julia style guide at:
 # http://julia.readthedocs.org/en/latest/manual/style-guide/
@@ -13,23 +15,57 @@ function readdata(file, format)
 end
 
 function read_movielens(file)
+  
+#The movielens data format is as follows :
+#Users and items are numbered consecutively from 1.
+#The data is randomly ordered. This is a tab separated list of
+#user id | item id | rating | timestamp.
+
+  df = readtable(file,separator = '\t',header = false);
+  rename!(df,:x1,:userId)
+  rename!(df,:x2,:itemId)
+  rename!(df,:x3,:rating)
+  rename!(df,:x4,:timestamp)
+  matrix(df::DataMatrix, na = true)
+  return df
 
 end
 
 function read_netflix(file)
   # datset format at:
   # https://gist.github.com/janisozaur/3192952
-
+  ### Ratings are withheld for the netflix data
+  ### The DataFrame is an array of userIds,itemIds and timestamps only!!!
+  f  = open(file);
+  df = DataFrame(userId,itemId,timestamp)
+  for line in eachline(f):
+	  if(line[end-1] == ':')
+	      movieId = line[:end-1]
+	  else
+              parts = split(ln,",")
+              push!(df,[movieId,parts[0],parts[1]])
+          end
 end
 
 function read_jester(file)
   # http://www.ieor.berkeley.edu/%7Egoldberg/jester-data/
-
+  # /home/pramod/Desktop/RecSysData/Various DataSets/jester-data-1.xls
+  f  = open(file);
+  df     = DataFrame(userId,itemId,rating)
+  tempDf = Taro.readxl(file, "Sheet1", "A1:CW24983"; header=false)
+  
+  for 
+  
 end
 
 function read_lastfm(file)
   # http://www.dtic.upf.edu/~ocelma/MusicRecommendationDataset/index.html
-
+  df = readtable(file,separator = '\t',header = false);
+  rename!(df,:x1,:userId)
+  rename!(df,:x2,:artistId)
+  rename!(df,:x3,:rating)
+  matrix(df::DataMatrix, na = true)
+  return df
 end
 
 function read_yahoomusic(file)
