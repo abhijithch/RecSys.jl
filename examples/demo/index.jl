@@ -33,7 +33,7 @@ function main(window)
             title(2, "Top $n recommendations for $(users[user])"),
             vskip(2em),
             intersperse(vbox(vskip(1em), hline(), vskip(1em)),
-                map(showmovie, recommend(user, n))),
+                map(showmovie, recommend(user, n)))...,
         ) |> pad(1em)
     end
 end
