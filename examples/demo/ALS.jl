@@ -93,5 +93,6 @@ function recommend(user,n)
     # unseen_top = setdiff(Set(top),Set(m))
     # To Do: remove the intersection of seen movies.  
     movie_names = readdlm("movies.csv",'\,')
+    println(typeof(movie_names[top[1:n,:][:],2]))
     movie_names[top[1:n,:][:],2]
 end
