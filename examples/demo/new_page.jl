@@ -14,22 +14,23 @@ function showmovie(m)
     desc = vbox( fontsize(1.5em, m),
                getfield(m, "Genre")
                )
-    #rating_radio = radiogroup([radio(:rate, "Rate $i") for i in 1:5] , 
-    #                          name="Rate this movie"
-    #                         )
+    rating_radio = radiogroup([radio("0", "0"),radio("1", "1"), radio("2", "2"),radio("3", "3"),radio("4", "4"),radio("5", "5")]; 
+                              name="Your Rating (0 for \"didn't watch\" )"
+                             )
 
     #rate = string("Rate me!") |> radio(:rating; toggles=true, disabled=false) 
-    rate = slider(0:5; name="Your rating", value=0, editable=true, pin=true, disabled=false, secondaryprogress=0)
+    #rate = slider(0:5; name="Your rating", value=0, editable=true, pin=true, disabled=false, secondaryprogress=0)
                  
-    vbox(poster,vskip(1em), desc, vskip(1em), rate)
+    vbox(poster,vskip(1em), desc, vskip(1em), width(20em,rating_radio))
 
 end
 
 
-function getmovies(movie_set)
-    vbox(intersperse(vbox( vskip(1em), hline(), vskip(1em)), 
-                               map(showmovie, movie_set[floor(rand(10)*1000), 2]  )                
-                              ) )
+function getmovies(movie_set, num_movies)
+   # vbox(intersperse(vbox( vskip(1em), hline(), vskip(1em)), 
+    #                           map(showmovie, 
+        movie_set[floor(rand(num_movies)*1600), 2]                  
+   #                           ) ) )
 
 end
 
@@ -43,24 +44,30 @@ function main(window)
     movie_set = readdlm("movies.csv",'\,')
     #movie_tile = map(showmovie, movie_set[movie_numbers, 2])
 
-    vlist0 = vbox(title(1, "To get recommendations, rate some movies first"))
+    username = textinput("";name=:username, label="Your Name Here", floatinglabel=false, maxlength=256, pattern="(\w)+(\b)(\w)+", error="Please use alphanumerics or _ or space")
+    #submit_button = button(      map(pad([left, right], 1em), ["Submit", "Now"]) ; name=:submit, raised=true, disabled=false, noink=true )
+    submit_button = iconbutton("send")
 
-    vlist1 = vbox( intersperse(vbox( vskip(1em), hline(), vskip(1em)), 
-                               flex(map(showmovie, movie_set[floor(rand(10)*1000), 2]  ) ) 
+    vlist0 = vbox(title(1, "To get recommendations, rate some movies (0 for didn't watch and 1-5 for ratings)"), hskip(3em), width(20em, username))
+
+    vlist1 = hbox( intersperse(hbox( hskip(1em), vline(), hskip(1em)), 
+#                               flex(
+                  map(border(allsides, solid, 1em, #892), map(showmovie, getmovies(movie_set, 5)) )
+# ) 
                               ) 
                  )
-    vlist2 = vbox( intersperse(vbox( vskip(1em), hline(), vskip(1em)), 
-                               flex(map(showmovie, movie_set[floor(rand(10)*1000), 2]  )  )              
+    vlist2 = hbox( intersperse(hbox( hskip(1em), vline(), hskip(1em)), 
+                               flex(map(showmovie, movie_set[floor(rand(5)*1000), 2]  )  )              
                               )    
                  )
-    vlist3 = vbox( intersperse(vbox( vskip(1em), hline(), vskip(1em)), 
-                               flex(map(showmovie, movie_set[floor(rand(10)*1000), 2]  ) )               
+    vlist3 = hbox( intersperse(hbox( hskip(1em), vline(), hskip(1em)), 
+                               flex(map(showmovie, movie_set[floor(rand(5)*1000), 2]  ) )               
                               )    
                  )
 
     #displayedlist = hbox( vlist0, intersperse(vskip(1em), hline(), vskip(1em)),   map(getmovies, [1:3]))
    
-    display = vbox(vlist0, vskip(3em), hbox(flex(vlist1), flex(vlist2), flex(vlist3)) )
+    display = vbox(vlist0, vskip(3em),width(10em, submit_button), vskip(3em), vbox(flex(vlist1), flex(vlist2), flex(vlist3)) )
 
 
 end
