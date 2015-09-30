@@ -12,31 +12,16 @@ function Rating(path::ASCIIString,delim)
     return tempR
 end
 
-function Prepare(tempR::SparseMatrixCSC{Int64,Int64}, noFactors::Int64)
+function Prepare(R::SparseMatrixCSC{Int64,Int64}, noFactors::Int64)
     N_f = noFactors
-    (n_u,n_m)=size(tempR)
-    println(n_u)
-    println(n_m)
-    tempR_t=tempR'
+    R_t=R'
     #Filter out empty movies or users.
-    indd_users=trues(n_u)
-    println(size(indd_users))
-    for u=1:n_u
-        movies=find(tempR_t[:,u])
-        if length(movies)==0
-            indd_users[u]=false
-        end
-    end
-    tempR=tempR[indd_users,:]
-    indd_movies=trues(n_m)
-    for m=1:n_m
-        users=find(tempR[:,m])
-        if length(users)==0
-            indd_movies[m]=false
-        end
-    end
-    tempR=tempR[:,indd_movies]
-    R=tempR
+    users=sum(R_t,1)
+    indd_users=find(users)
+    R=R[indd_users,:]
+    movies=sum(R,1)
+    indd_movies=find(movies)
+    R=R[:,indd_movies]
     R_t=R'
     (n_u,n_m)=size(R)
     #Using Parameters lambda and N_f
@@ -50,11 +35,16 @@ function Prepare(tempR::SparseMatrixCSC{Int64,Int64}, noFactors::Int64)
     #Update FirstRow as mean of nonZeros of R 
     M = [FirstRow';MM']
     U=zeros(n_u,N_f)
-    return U, M
+    return U, M, R
 end
 
-function factorize(R::SparseMatrixCSC{Int64,Int64},noIters::Int64,noFactors::Int64)
-    (n_u,n_m)=size(R)
+@debug function factorize(Ra::SparseMatrixCSC{Int64,Int64},noIters::Int64,noFactors::Int64)
+    @bp
+    U, M, R = Prepare(Ra,noFactors)
+    (n_u,k)=size(U)
+    (k,n_m)=size(M)
+    noIters=noIters
+    R_t = R'
     N_f = noFactors
     lambda = 0.065
     (r,c,v)=findnz(R)
@@ -62,16 +52,22 @@ function factorize(R::SparseMatrixCSC{Int64,Int64},noIters::Int64,noFactors::Int
     locWtU=sum(II,2)
     locWtM=sum(II,1)
     LamI=lambda*eye(N_f)
-    U, M = Prepare(R,noFactors)
-    noIters=noIters
-    R_t = R'
+    movies=Dict{Int64,Any}()
+    for u=1:n_u
+        movies[u]=find(R_t[:,u])
+    end
+    users=Dict{Int64,Any}()
+    for m=1:n_m
+        users[m]=find(R[:,m])
+    end
     #The Alternate Least Squares(ALS)
     for i=1:noIters
         for u=1:n_u
     	    #Update U
-            movies=find(R_t[:,u])
-            M_u=M[:,movies]
-            vector=M_u*full(R_t[movies,u])
+            M_u=M[:,movies[u]]
+            #vector=Array{Float64,2}
+            vector=M_u*full(R_t[movies[u],u])
+            #matrix=Array{Float64,2}
             matrix=(M_u*M_u')+locWtU[u]*LamI
             x=matrix\vector
             U[u,:]=x
@@ -80,9 +76,10 @@ function factorize(R::SparseMatrixCSC{Int64,Int64},noIters::Int64,noFactors::Int
         #println(i)
         for m=1:n_m
     	    #Update M
-  	    users=find(R[:,m])
-            U_m=U[users,:]
-            vector=U_m'*full(R[users,m])
+            U_m=U[users[m],:]
+            #vector=Array{Float64,2}
+            vector=U_m'*full(R[users[m],m])
+            #matrix=Array{Float64,2}
             matrix=(U_m'*U_m)+locWtM[m]*LamI
             x=matrix\vector
 	    #println("OK")

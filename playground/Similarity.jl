@@ -39,7 +39,7 @@ function PearsonCorrelationHelper(file)
                   Y = Float64[]
                   for(movie in intersect(M,M_i))
                       push!(X , (df[(df[:userId] .== 1)  & (df[:itemId] .== movie), :rating])[1])
-                      push!(Y ,df[(df[:userId] .== M_i) & (df[:itemId] .== movie), :rating])[1])
+                      push!(Y , (df[(df[:userId] .== M_i) & (df[:itemId] .== movie), :rating])[1])
                   end
                   push!( CorrelationArray , pearsonCorrelation(X,Y))
      end

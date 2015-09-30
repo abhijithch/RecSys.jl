@@ -1,9 +1,14 @@
-A = readdlm("u1.base",'\t';header=false)
+A = readdlm("../../ml-100k/u1.base",'\t';header=false)
+T = readdlm("../../ml-100k/u1.test",'\t';header=false)
 I = readdlm("movies.csv",',';header=false)
 #The format is userId , movieId , rating
 userCol = int(A[:,1])
 movieCol = int(A[:,2])
 ratingsCol = int(A[:,3])
+
+userColTest = int(T[:,1])
+movieColTest = int(T[:,2])
+ratingsColTest = int(T[:,3])
 
 #Create Sparse Matrix
 tempR=sparse(userCol,movieCol,ratingsCol)
@@ -40,8 +45,7 @@ R_t=R'
 #lambda related to regularization and cross validation
 #N_f is the dimension of the feature space
 lambda = 0.065
-N_f = 9
-
+N_f = 4
 
 MM = rand(n_m,N_f-1)
 FirstRow=zeros(Float64,n_m)
@@ -82,7 +86,6 @@ for i=1:noIters
 	#println("OK")
         M[:,m]=x
      end
-
 end
 
 function recommend(user,n)
