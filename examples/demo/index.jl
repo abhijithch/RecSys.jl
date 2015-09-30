@@ -27,7 +27,7 @@ function main(window)
     users = ["Alice", "Bob", "Charlie", "Dorothy"]
     lift(userᵗ, nᵗ) do user, n
         vbox(
-            dropdownmenu("Who", users, selected=1) >>> userᵗ,
+            dropdownmenu("Who", menu(users) >>> userᵗ),
             hbox("Count", slider(1:100, value=10) >>> nᵗ) |>
                 packacross(center),
             title(2, "Top $n recommendations for $(users[user])"),
