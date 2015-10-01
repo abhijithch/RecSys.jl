@@ -18,7 +18,6 @@ function showmovie(m)
                               name="Your Rating (0 for \"didn't watch\" )"
                              )
 
-    #rate = string("Rate me!") |> radio(:rating; toggles=true, disabled=false) 
     #rate = slider(0:5; name="Your rating", value=0, editable=true, pin=true, disabled=false, secondaryprogress=0)
                  
     vbox(poster,vskip(1em), desc, vskip(1em), width(20em,rating_radio))
@@ -52,23 +51,22 @@ function main(window)
 
     vlist1 = hbox( intersperse(hbox( hskip(1em), vline(), hskip(1em)), 
 #                               flex(
-                  map(border(allsides, solid, 1em, #892), map(showmovie, getmovies(movie_set, 5)) )
+                   map(showmovie, getmovies(movie_set, 5)) 
 # ) 
                               ) 
                  )
     vlist2 = hbox( intersperse(hbox( hskip(1em), vline(), hskip(1em)), 
-                               flex(map(showmovie, movie_set[floor(rand(5)*1000), 2]  )  )              
+                               flex(map(showmovie, getmovies(movie_set,5) ) )              
                               )    
                  )
     vlist3 = hbox( intersperse(hbox( hskip(1em), vline(), hskip(1em)), 
-                               flex(map(showmovie, movie_set[floor(rand(5)*1000), 2]  ) )               
+                               flex(map(showmovie, getmovies(movie_set,5) ) )               
                               )    
                  )
 
     #displayedlist = hbox( vlist0, intersperse(vskip(1em), hline(), vskip(1em)),   map(getmovies, [1:3]))
    
     display = vbox(vlist0, vskip(3em),width(10em, submit_button), vskip(3em), vbox(flex(vlist1), flex(vlist2), flex(vlist3)) )
-
 
 end
 
