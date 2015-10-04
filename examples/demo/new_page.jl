@@ -2,7 +2,7 @@ using Reactive
 using JSON
 include("ALS.jl")
 
-movie_meta = JSON.parse(readall("movie_info.json"))
+movie_meta = JSON.parse(readall("./data/movie_info.json"))
 
 getfield(m, x, def="") = get(movie_meta, m, Dict()) |>
     (d -> get(d, x, def))
@@ -40,7 +40,7 @@ function main(window)
     push!(window.assets, "layout2")
 
     movie_numbers =  floor(rand(10)*1000)
-    movie_set = readdlm("movies.csv",'\,')
+    movie_set = readdlm("./data/movies.csv",'\,')
     #movie_tile = map(showmovie, movie_set[movie_numbers, 2])
 
     vlist0 = vbox(title(1, "To get recommendations, rate some movies first"))

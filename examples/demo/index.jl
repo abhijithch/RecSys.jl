@@ -1,7 +1,10 @@
-include("ALS.jl")
+
+include("ALSDemo.jl")
+R = Rating("./data/ml-100k/u1.base",'\t',false)
+U , M = factorize(R,10,10)
 using JSON
 
-movie_meta = JSON.parse(readall("movie_info.json"))
+movie_meta = JSON.parse(readall("./data/movie_info.json"))
 
 getfield(m, x, def="") = get(movie_meta, m, Dict()) |>
     (d -> get(d, x, def))
@@ -33,7 +36,7 @@ function main(window)
             title(2, "Top $n recommendations for $(users[user])"),
             vskip(2em),
             intersperse(vbox(vskip(1em), hline(), vskip(1em)),
-                map(showmovie, recommend(user, n)))...,
+                        map(showmovie, recommend(U,M,R,user, n)))...,
         ) |> pad(1em)
     end
 end

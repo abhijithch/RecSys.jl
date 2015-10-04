@@ -1,6 +1,6 @@
-A = readdlm("../../ml-100k/u1.base",'\t';header=false)
-T = readdlm("../../ml-100k/u1.test",'\t';header=false)
-I = readdlm("movies.csv",',';header=false)
+A = readdlm("./data/ml-100k/u1.base",'\t';header=false)
+T = readdlm("./data/ml-100k/u1.test",'\t';header=false)
+I = readdlm("./data/movies.csv",',';header=false)
 #The format is userId , movieId , rating
 userCol = int(A[:,1])
 movieCol = int(A[:,2])

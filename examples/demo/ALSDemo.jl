@@ -1,18 +1,26 @@
-function Rating(path::ASCIIString,delim)
+function Rating(path::ASCIIString,delim,h)
     #A = readdlm("../../ml-100k/u1.base",'\t';header=false)
     #T = readdlm("../../ml-100k/u1.test",'\t';header=false)
-    A = readdlm(path,delim,header=false)
+    A = readdlm(path,delim;header=h)
     #The format is userId , movieId , rating
-    userCol = int(A[:,1])
-    movieCol = int(A[:,2])
-    ratingsCol = int(A[:,3])
+    if !h
+        userCol = int(A[:,1])
+        movieCol = int(A[:,2])
+        ratingsCol = float(A[:,3])
+    else
+	userCol = int(A[1][:,1])
+        movieCol = int(A[1][:,2])
+        ratingsCol = float(A[1][:,3])
+    end
     #Create Sparse Matrix
     tempR=sparse(userCol,movieCol,ratingsCol)
     #println(tempR)
     return tempR
 end
 
-function Prepare(R::SparseMatrixCSC{Int64,Int64}, noFactors::Int64)
+
+
+function Prepare(R::SparseMatrixCSC{Float64,Int64}, noFactors::Int64)
     N_f = noFactors
     R_t=R'
     #Filter out empty movies or users.
@@ -38,8 +46,7 @@ function Prepare(R::SparseMatrixCSC{Int64,Int64}, noFactors::Int64)
     return U, M, R
 end
 
-@debug function factorize(Ra::SparseMatrixCSC{Int64,Int64},noIters::Int64,noFactors::Int64)
-    @bp
+function factorize(Ra::SparseMatrixCSC{Float64,Int64},noIters::Int64,noFactors::Int64)
     U, M, R = Prepare(Ra,noFactors)
     (n_u,k)=size(U)
     (k,n_m)=size(M)
@@ -89,7 +96,26 @@ end
     return U, M
 end
 
-#=
+# Function to save the computed
+function save(U,M,R,ftype)
+
+end
+
+function load(ftype)
+
+end
+
+         
+function update_R()
+
+end
+
+function top_factors()
+
+end
+
+
+
 function recommend(U, M, R,user,n)
     # All the movies sorted in decreasing order of rating.
     top = sortperm(vec(U[user,:]*M))
@@ -97,7 +123,7 @@ function recommend(U, M, R,user,n)
     m = find(R[user,:])    
     # unseen_top = setdiff(Set(top),Set(m))
     # To Do: remove the intersection of seen movies.  
-    movie_names = readdlm("movies.csv",'\,')
+    movie_names = readdlm("./data/movies.csv",'\,')
     movie_names[top[1:n,:][:],2]
 end
-=#
+
