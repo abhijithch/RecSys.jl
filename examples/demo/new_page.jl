@@ -33,6 +33,7 @@ end
 
 function updaterating!(user_rating)
 
+
 end
 
 
@@ -63,6 +64,7 @@ function main(window)
     submit_button = iconbutton("send")
 
     vlist0 = vbox(title(1, "To get recommendations, rate some movies (0 for didn't watch and 1-5 for ratings)"), hskip(3em), width(20em, username))
+
 
 ### GET A LIST OF MOVIES, num_movies IS THE NUMBER OF MOVIES YOU WANT ###
 ## nrows is the number of rows in the display, and ncols is the number of columns per row.
