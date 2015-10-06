@@ -126,4 +126,3 @@ function recommend(U, M, R,user,n)
     movie_names = readdlm("./data/movies.csv",'\,')
     movie_names[top[1:n,:][:],2]
 end
-
