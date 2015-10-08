@@ -1,20 +1,12 @@
 using Reactive
 using JSON
-global loaded = false
-if !loaded
-    include("ALS.jl")
-    loaded = true
-end
 
-movie_meta = JSON.parse(readall("./data/movie_info.json"))
+include("index.jl")
 
-getfield(m, x, def="") = get(movie_meta, m, Dict()) |>
-    (d -> get(d, x, def))
-
-function show_movie_input(m, updates, idx)
-    poster = image(getfield(m,"Poster", "http://uwatch.to/posters/placeholder.png"), alt=m) |>
+function show_movie_input(meta, m, updates, idx)
+    poster = image(getfield(meta, m,"Poster", "http://uwatch.to/posters/placeholder.png"), alt=m) |>
        size(120px, 180px) |> vbox |> packacross(center)
-    desc = vbox( fontsize(1em, m), getfield(m, "Genre")    )
+    desc = vbox( fontsize(1em, m), getfield(meta, m, "Genre")    )
 
     #rating_widget = radiogroup([radio("0", "0"),radio("1", "1"), radio("2", "2"),radio("3", "3"),radio("4", "4"),radio("5", "5")];
     #                          name="Your Rating (0 for \"didn't watch\" )"
@@ -27,8 +19,8 @@ function show_movie_input(m, updates, idx)
     #end
 
     content = vbox(poster,vskip(0.7em),
-         getfield(m, "Title", m) |> fontsize(1.2em), vskip(0.5em),
-         getfield(m, "Genre") |> fontsize(0.7em),
+         getfield(meta, m, "Title", m) |> fontsize(1.2em), vskip(0.5em),
+         getfield(meta, m, "Genre") |> fontsize(0.7em),
          vskip(1em), width(15em,rating_widget)) |> pad(1em)
     roundcorner(1em, content) |> fillcolor("#f1f1ff") |> pad(0.5em)
 
@@ -55,6 +47,10 @@ function main(window)
     push!(window.assets, "widgets")
     push!(window.assets, "layout2")
 
+    R = Rating("./data/ml-100k/u1.base",'\t',false)
+    U , M = factorize(R,10,10)
+    movie_meta = JSON.parse(readall("./data/movie_info.json"))
+
     movie_dataset = readdlm("./data/movies.csv",'\,')
     s = sampler()
 
@@ -79,10 +75,18 @@ function main(window)
     submitted_ratings = sampleon(btn, ratings)
     #ratingvec = zeros(size(movie_dataset))
 
-    list = hbox([show_movie_input(m, input, idx) for (idx, m) in enumerate(movielist[:,2])]) |> wrap
+    list = hbox([show_movie_input(movie_meta, m, input, idx) for (idx, m) in enumerate(movielist[:,2])]) |> wrap
 
-
-    vbox(vlist0, ratings, submitted_ratings, vskip(3em),width(10em, submit_button), vskip(3em), list ) |> Escher.pad(2em)
+    vbox(
+        vlist0,
+        ratings,
+        submitted_ratings,
+        vskip(3em),
+        width(10em, submit_button),
+        vskip(3em),
+        list,
+        show_list(2, R, U, M, 20, movie_meta)
+    ) |> Escher.pad(2em)
 
 end
 
