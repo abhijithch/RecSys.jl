@@ -24,22 +24,25 @@ function ALSFactorization(trainingData::SparseMatrixCSC, numberOfFeatures, noOfI
 	#println(itemMatrix)
 	userMatrix = zeros(noOfUsers, numberOfFeatures)
 	#println(userMatrix)
-	remoteRefOfItemMatrix = distributeMatrixByColumn(itemMatrix, noOfWorkers, noOfItems)	
-	remoteRefOfUserMatrix = distributeMatrixByRow(userMatrix, noOfWorkers, noOfUsers)
-	remoteRefOfTraningDataByRow = distributeMatrixByRow(trainingData, noOfWorkers, noOfUsers)
-	remoteRefOfTraningDataByColumn = distributeMatrixByColumn(trainingData, noOfWorkers, noOfItems)
-
-	for iter = 1: noOfIterations		
-		@sync begin
-			for worker = 1:noOfWorkers										
-				remoteRefOfUserMatrix[worker] = @spawnat worker+1 findU(remoteRefOfTraningDataByRow[worker], remoteRefOfItemMatrix, noOfWorkers, noOfUsers)							
-	        end
-	        for worker = 1:noOfWorkers		
-				remoteRefOfItemMatrix[worker] = @spawnat worker+1 findM(remoteRefOfTraningDataByColumn[worker], remoteRefOfUserMatrix, noOfWorkers, noOfUsers)							
-	        end
-	 	end       
-	end
-
+    remoteRefOfItemMatrix = distributeMatrixByColumn(itemMatrix, noOfWorkers, noOfItems)	
+    remoteRefOfUserMatrix = distributeMatrixByRow(userMatrix, noOfWorkers, noOfUsers)
+    remoteRefOfTraningDataByRow = distributeMatrixByRow(trainingData, noOfWorkers, noOfUsers)
+    remoteRefOfTraningDataByColumn = distributeMatrixByColumn(trainingData, noOfWorkers, noOfItems)
+    
+    for iter = 1: noOfIterations
+        println(iter)
+	@sync begin
+	    for (widx, worker) in enumerate(workers())										
+		remoteRefOfUserMatrix[widx] = @spawnat worker findU(remoteRefOfTraningDataByRow[widx], remoteRefOfItemMatrix, noOfWorkers, noOfUsers)							
+	    end
+        end
+	@sync begin
+            for (widx, worker) in enumerate(workers())	
+		remoteRefOfItemMatrix[widx] = @spawnat worker findM(remoteRefOfTraningDataByColumn[widx], remoteRefOfUserMatrix, noOfWorkers, noOfUsers)							
+	    end
+	end       
+    end
+    
 	#reconstrut the U and M
 	ItemMatrix = gatherItemMatrix(remoteRefOfItemMatrix, noOfWorkers)
 	UserMatrix = gatherUserMatrix(remoteRefOfUserMatrix, noOfWorkers)

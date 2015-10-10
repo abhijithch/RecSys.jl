@@ -1,37 +1,37 @@
 
 function gatherItemMatrix(remoteRefOfItemMatrix::Array, noOfWorkers)	
-	fullItemMatrix = Array{Float64,2}
+    fullItemMatrix = Array{Float64,2}
     for k in 1:noOfWorkers
     	if k==1			    		    		
-    		fullItemMatrix =  fetch(remoteRefOfItemMatrix[k])'			    		
+    	    fullItemMatrix =  fetch(remoteRefOfItemMatrix[k])'			    		
     	else
-    		fullItemMatrix = [fullItemMatrix;(fetch(remoteRefOfItemMatrix[k]))']
+    	    fullItemMatrix = [fullItemMatrix;(fetch(remoteRefOfItemMatrix[k]))']
     	end
     end	    
     return fullItemMatrix
 end	
 
- function gatherUserMatrix(remoteRefOfUserMatrix::Array, noOfWorkers)
-	uMatrix = Array{Float64,2}
+function gatherUserMatrix(remoteRefOfUserMatrix::Array, noOfWorkers)
+    uMatrix = Array{Float64,2}
     for k in 1:noOfWorkers
     	if k == 1
-    		uMatrix = fetch(remoteRefOfUserMatrix[k])
+    	    uMatrix = fetch(remoteRefOfUserMatrix[k])
     	else
-    		uMatrix = [uMatrix;fetch(remoteRefOfUserMatrix[k])]
+    	    uMatrix = [uMatrix;fetch(remoteRefOfUserMatrix[k])]
     	end
     end
     return uMatrix
 end
 
 function findU(remoteRefOfTraningDataByRow::RemoteRef, remoteRefOfItemMatrix::Array, noOfWorkers::Int64, noOfUsers)												   
-
-	fullItemMatrix = gatherItemMatrix(remoteRefOfItemMatrix, noOfWorkers)
+    
+    fullItemMatrix = gatherItemMatrix(remoteRefOfItemMatrix, noOfWorkers)
     fullItemMatrix = fullItemMatrix'			    			       
-	ratingMatrix = fetch(remoteRefOfTraningDataByRow)    
-	xMatrix = Array(Float64, size(ratingMatrix)[1], noOfUsers)	
-
-	for r = 1:size(ratingMatrix)[1]		
-		ratingMatrixTranspose = (ratingMatrix[r,:])'									
+    ratingMatrix = fetch(remoteRefOfTraningDataByRow)    
+    xMatrix = Array(Float64, size(ratingMatrix)[1], noOfUsers)	
+    
+    for r = 1:size(ratingMatrix)[1]		
+	ratingMatrixTranspose = (ratingMatrix[r,:])'									
     	items=find(ratingMatrixTranspose)  			    			   			    				    	        
     	vector = (fullItemMatrix[:,items] ) * full(ratingMatrixTranspose)[items]        
     	matrix=(fullItemMatrix[:,items]*(fullItemMatrix[:,items])')			    				    	    	        

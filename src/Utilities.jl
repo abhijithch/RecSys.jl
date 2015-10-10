@@ -49,12 +49,12 @@ function distributeMatrixByColumn(matrix, noOfWorkers::Int64, totalSize::Int64)
     minColumnPerProc = floor(totalSize/noOfWorkers)
     additionalColumnForLastProc = totalSize%noOfWorkers
     
-    for w  in 1:noOfWorkers	    
-        remoteRefOfMatrix[w] =  RemoteRef(w+1)
-        if w == noOfWorkers
-            put!(remoteRefOfMatrix[w],matrix[:,[minColumnPerProc*(w-1)+1:end]])
+    for (widx,worker)  in enumerate(workers())
+        remoteRefOfMatrix[widx] =  RemoteRef(worker)
+        if widx == noOfWorkers
+            put!(remoteRefOfMatrix[widx],matrix[:,[minColumnPerProc*(widx-1)+1:end]])
         else
-            put!(remoteRefOfMatrix[w],matrix[:,[minColumnPerProc*(w-1)+1:minColumnPerProc*w]])
+            put!(remoteRefOfMatrix[widx],matrix[:,[minColumnPerProc*(widx-1)+1:minColumnPerProc*widx]])
         end
     end
 	return remoteRefOfMatrix
@@ -66,12 +66,12 @@ function distributeMatrixByRow(matrix, noOfWorkers::Int64, totalSize::Int64)
     minRowPerProc = floor(totalSize/noOfWorkers)
     additionalRowForLastProc = totalSize%noOfWorkers
     
-    for w  in 1:noOfWorkers	    
-        remoteRefOfMatrix[w] =  RemoteRef(w+1)
-        if w == noOfWorkers
-            put!(remoteRefOfMatrix[w],matrix[[minRowPerProc*(w-1)+1:end],:])
+    for (widx,worker)  in enumerate(workers())	    
+        remoteRefOfMatrix[widx] =  RemoteRef(worker)
+        if widx == noOfWorkers
+            put!(remoteRefOfMatrix[widx],matrix[[minRowPerProc*(widx-1)+1:end],:])
         else
-            put!(remoteRefOfMatrix[w],matrix[[minRowPerProc*(w-1)+1:minRowPerProc*w],:])
+            put!(remoteRefOfMatrix[widx],matrix[[minRowPerProc*(widx-1)+1:minRowPerProc*widx],:])
         end
     end
     return remoteRefOfMatrix
