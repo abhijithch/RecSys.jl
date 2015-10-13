@@ -1,4 +1,3 @@
-
 function filterNonParticipatingUsersAndItems(trainingData::SparseMatrixCSC)	
     trainingDataTranspose = trainingData'
     
@@ -8,10 +7,10 @@ function filterNonParticipatingUsersAndItems(trainingData::SparseMatrixCSC)
     ratedUsers=trues(noOfUsers)
     for u = 1:noOfUsers
         itemsRatedByUser = find(trainingDataTranspose[:,u])
-	    if length(itemsRatedByUser) == 0
-                ratedUsers[u] = false
-            end
-	end
+	if length(itemsRatedByUser) == 0
+            ratedUsers[u] = false
+        end
+    end
     trainingData=trainingData[ratedUsers,:]
     
     #Filter the items that are not rated by any user.
@@ -19,7 +18,7 @@ function filterNonParticipatingUsersAndItems(trainingData::SparseMatrixCSC)
     for i =1:noOfItems
         userRatedItems = find(trainingData[:,i])
         if length(userRatedItems) == 0
-	       ratedItems[i]=false
+	    ratedItems[i]=false
         end
     end
 	trainingData=trainingData[:,ratedItems]
@@ -31,7 +30,7 @@ function initializeItemMatrix(trainingData, noOfItems::Int64, numberOfFeatures::
     
     # for i = 1:noOfItems
     # FirstRow[i]=mean(nonzeros(trainingData[:,i]))
-# end
+    # end
     
     # finalItemMatrix = [FirstRow';itemMatrix']
     # println(finalItemMatrix)
