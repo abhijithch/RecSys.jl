@@ -45,7 +45,7 @@ R_t=R'
 #lambda related to regularization and cross validation
 #N_f is the dimension of the feature space
 lambda = 0.065
-N_f = 4
+N_f = 30
 
 MM = rand(n_m,N_f-1)
 FirstRow=zeros(Float64,n_m)
