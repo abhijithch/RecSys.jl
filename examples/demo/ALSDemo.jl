@@ -1,128 +1,198 @@
-function Rating(path::ASCIIString,delim,h)
-    #A = readdlm("../../ml-100k/u1.base",'\t';header=false)
-    #T = readdlm("../../ml-100k/u1.test",'\t';header=false)
-    A = readdlm(path,delim;header=h)
-    #The format is userId , movieId , rating
-    if !h
-        userCol = int(A[:,1])
-        movieCol = int(A[:,2])
-        ratingsCol = float(A[:,3])
-    else
-	userCol = int(A[1][:,1])
-        movieCol = int(A[1][:,2])
-        ratingsCol = float(A[1][:,3])
+type FileSpec
+    name::AbstractString
+    dlm::Char
+    header::Bool
+
+    function FileSpec(name::AbstractString, dlm::Char=',', header::Bool=false)
+        new(name, dlm, header)
     end
-    #Create Sparse Matrix
-    tempR=sparse(userCol,movieCol,ratingsCol)
-    #println(tempR)
-    return tempR
+end
+
+function read_input(fspec::FileSpec)
+    # read file and skip the header
+    F = readdlm(fspec.name, fspec.dlm, header=fspec.header)
+    fspec.header ? F[1] : F
+end
+
+type Inputs
+    movie_names::FileSpec
+    ratings::FileSpec
+    R::Nullable{SparseMatrixCSC{Float64,Int64}}
+    M::Nullable{Matrix}
+
+    function Inputs(movie_names::FileSpec, ratings::FileSpec)
+        new(movie_names, ratings, nothing, nothing)
+    end
+end
+
+function ratings(inp::Inputs)
+    if isnull(inp.R)
+        A = read_input(inp.ratings)
+
+        # separate the columns and make them of appropriate types
+        users   = convert(Vector{Int},     A[:,1])
+        movies  = convert(Vector{Int},     A[:,2])
+        ratings = convert(Vector{Float64}, A[:,3])
+
+        # create a sparse matrix
+        R = sparse(users, movies, ratings)
+        #R = filter_empty(R)
+        inp.R = Nullable(R)
+    end
+
+    get(inp.R)
+end
+
+function movie_names(inp::Inputs)
+    if isnull(inp.M)
+        A = read_input(inp.movie_names)
+        inp.M = Nullable(A)
+    end
+
+    get(inp.M)
+end
+
+type Model
+    U::Matrix{Float64}
+    M::Matrix{Float64}
+end
+
+type MovieALSRec
+    inp::Inputs
+    model::Nullable{Model}
+
+    function MovieALSRec(inp::Inputs)
+        new(inp, nothing)
+    end
+end
+
+function train(als::MovieALSRec, niters::Int, nfactors::Int64)
+    R = ratings(als.inp)
+    U, M = fact(R, niters, nfactors)
+    model = Model(U, M)
+    als.model = Nullable(model)
+    nothing
+end
+
+function save(als::MovieALSRec, filename::AbstractString)
+    open(filename, "w") do f
+        serialize(f, als)
+    end
+    nothing
+end
+
+function load(filename::AbstractString)
+    open(filename, "r") do f
+        deserialize(f)
+    end
 end
 
 
+##
+# Training
+#
+function filter_empty(R::SparseMatrixCSC{Float64,Int64})
+    U = sum(R, 2)
+    non_empty_users = find(U)
+    R = R[non_empty_users, :]
 
-function Prepare(R::SparseMatrixCSC{Float64,Int64}, noFactors::Int64)
-    N_f = noFactors
-    R_t=R'
-    #Filter out empty movies or users.
-    users=sum(R_t,1)
-    indd_users=find(users)
-    R=R[indd_users,:]
-    movies=sum(R,1)
-    indd_movies=find(movies)
-    R=R[:,indd_movies]
-    R_t=R'
-    (n_u,n_m)=size(R)
-    #Using Parameters lambda and N_f
-    #lambda related to regularization and cross validation
-    #N_f is the dimension of the feature space
-    MM = rand(n_m,N_f-1)
-    FirstRow=zeros(Float64,n_m)
-    for i=1:n_m
-        FirstRow[i]=mean(full(nonzeros(R[:,i])))
-    end
-    #Update FirstRow as mean of nonZeros of R 
-    M = [FirstRow';MM']
-    U=zeros(n_u,N_f)
-    return U, M, R
+    M = sum(R, 1)
+    non_empty_movies = find(M)
+    R[:, non_empty_movies]
 end
 
-function factorize(Ra::SparseMatrixCSC{Float64,Int64},noIters::Int64,noFactors::Int64)
-    U, M, R = Prepare(Ra,noFactors)
-    (n_u,k)=size(U)
-    (k,n_m)=size(M)
-    noIters=noIters
-    R_t = R'
-    N_f = noFactors
+function prep(R::SparseMatrixCSC{Float64,Int64}, nfactors::Int)
+    nusers, nmovies = size(R)
+
+    U = zeros(nusers, nfactors)
+    M = rand(nfactors, nmovies)
+    for idx in 1:nmovies
+        M[1,idx] = mean(nonzeros(R[:,idx]))
+    end
+
+    U, M, R
+end
+
+function nnz_counts(R::SparseMatrixCSC{Float64,Int64})
+    r, c, v = findnz(R)
+    S = sparse(r, c, 1)
+
+    nnzM = sum(S, 1)
+    nnzU = sum(S, 2)
+
+    nnzU, nnzM
+end
+
+function nnz_locs(R::SparseMatrixCSC{Float64,Int64})
+    res = Dict{Int64,Any}()
+    for idx in 1:size(R,2)
+        res[idx] = find(full(R[:,idx]))
+    end
+    res
+end
+
+function update_user(U, M, RT, nzM, u, nnzU, lambdaI)
+    nzmu = nzM[u]
+    Mu = M[:, nzmu]
+    vec = Mu * full(RT[nzmu, u])
+    mat = (Mu * Mu') + (nnzU[u] * lambdaI)
+    U[u,:] = mat \ vec
+    nothing
+end
+
+function update_movie(U, M, R, nzU, m, nnzM, lambdaI)
+    nzum = nzU[m]
+    Um = U[nzum, :]
+    Umt = Um'
+    vec = Umt * full(R[nzum, m])
+    mat = (Umt * Um) + (nnzM[m] * lambdaI)
+    M[:,m] = mat \ vec
+end
+
+function fact(R::SparseMatrixCSC{Float64,Int64}, niters::Int, nfactors::Int64)
+    U, M, R = prep(R, nfactors)
+    nusers, nmovies = size(R)
+    nnzU, nnzM = nnz_counts(R)   
+
     lambda = 0.065
-    (r,c,v)=findnz(R)
-    II=sparse(r,c,1)
-    locWtU=sum(II,2)
-    locWtM=sum(II,1)
-    LamI=lambda*eye(N_f)
-    movies=Dict{Int64,Any}()
-    for u=1:n_u
-        movies[u]=find(R_t[:,u])
-    end
-    users=Dict{Int64,Any}()
-    for m=1:n_m
-        users[m]=find(R[:,m])
-    end
-    #The Alternate Least Squares(ALS)
-    for i=1:noIters
-        for u=1:n_u
-    	    #Update U
-            M_u=M[:,movies[u]]
-            #vector=Array{Float64,2}
-            vector=M_u*full(R_t[movies[u],u])
-            #matrix=Array{Float64,2}
-            matrix=(M_u*M_u')+locWtU[u]*LamI
-            x=matrix\vector
-            U[u,:]=x
-            #println(round(x,2))
+    lambdaI = lambda * eye(nfactors)
+
+    RT = R'
+    nzU = nnz_locs(R)
+    nzM = nnz_locs(RT)
+
+    for iter in 1:niters
+        for u in 1:nusers
+            update_user(U, M, RT, nzM, u, nnzU, lambdaI)
         end
-        #println(i)
-        for m=1:n_m
-    	    #Update M
-            U_m=U[users[m],:]
-            #vector=Array{Float64,2}
-            vector=U_m'*full(R[users[m],m])
-            #matrix=Array{Float64,2}
-            matrix=(U_m'*U_m)+locWtM[m]*LamI
-            x=matrix\vector
-	    #println("OK")
-            M[:,m]=x
+        for m in 1:nmovies
+            update_movie(U, M, R, nzU, m, nnzM, lambdaI)
         end
     end
-    return U, M
+
+    U, M
 end
 
-# Function to save the computed
-function save(U,M,R,ftype)
+function recommend(als::MovieALSRec, user::Int; unseen::Bool=true, count::Int=10)
+    model = get(als.model)
+    U = model.U
+    M = model.M
 
-end
-
-function load(ftype)
-
-end
-
-         
-function update_R()
-
-end
-
-function top_factors()
-
-end
-
-
-
-function recommend(U, M, R,user,n)
     # All the movies sorted in decreasing order of rating.
-    top = sortperm(vec(U[user,:]*M))
-    # Movies seen by user
-    m = find(R[user,:])    
-    # unseen_top = setdiff(Set(top),Set(m))
-    # To Do: remove the intersection of seen movies.  
-    movie_names = readdlm("./data/movies.csv",'\,')
-    movie_names[top[1:n,:][:],2]
+    Uvec = reshape(U[user, :], 1, size(U, 2))
+    top = sortperm(vec(Uvec*M))
+
+    mnames = movie_names(als.inp)
+
+    if unseen
+        R = ratings(als.inp)
+        # movies seen by user
+        seen = find(full(R[user,:]))
+
+        # filter out movies already seen
+        println("seen:")
+        println(mnames[seen, 2])
+    end
+
+    mnames[top[1:count, :][:], 2]
 end
