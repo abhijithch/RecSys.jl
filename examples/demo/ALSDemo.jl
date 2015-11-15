@@ -1,3 +1,5 @@
+using ParallelSparseMatMul
+
 type FileSpec
     name::AbstractString
     dlm::Char
@@ -160,17 +162,26 @@ function fact(R::SparseMatrixCSC{Float64,Int64}, niters::Int, nfactors::Int64)
     RT = R'
     nzU = nnz_locs(R)
     nzM = nnz_locs(RT)
+    fact_iters(U, M, R, RT, nzU, nzM, niters, nusers, nmovies, nnzU, nnzM, lambdaI)
+end
+
+function fact_iters(_U, _M, _R, _RT, nzU, nzM, niters, nusers, nmovies, nnzU, nnzM, _lambdaI)
+    U = share(_U)
+    M = share(_M)
+    R = share(_R)
+    RT = share(_RT)
+    lambdaI = share(_lambdaI)
 
     for iter in 1:niters
-        for u in 1:nusers
+        @sync @parallel for u in 1:nusers
             update_user(U, M, RT, nzM, u, nnzU, lambdaI)
         end
-        for m in 1:nmovies
+        @sync @parallel for m in 1:nmovies
             update_movie(U, M, R, nzU, m, nnzM, lambdaI)
         end
     end
 
-    U, M
+    copy(U), copy(M)
 end
 
 function recommend(als::MovieALSRec, user::Int; unseen::Bool=true, count::Int=10)
