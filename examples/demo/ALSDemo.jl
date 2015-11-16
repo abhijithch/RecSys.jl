@@ -69,7 +69,11 @@ type MovieALSRec
 end
 
 function train(als::MovieALSRec, niters::Int, nfactors::Int64)
+    println("reading inputs")
+    t1 = time()
     R = ratings(als.inp)
+    t2 = time()
+    println("read time: $(t2-t1)")
     U, M = fact(R, niters, nfactors)
     model = Model(U, M)
     als.model = Nullable(model)
@@ -126,14 +130,22 @@ function nnz_counts(R::SparseMatrixCSC{Float64,Int64})
 end
 
 function nnz_locs(R::SparseMatrixCSC{Float64,Int64})
-    res = Dict{Int64,Any}()
+    res = Dict{Int64,Vector{Int64}}()
     for idx in 1:size(R,2)
         res[idx] = find(full(R[:,idx]))
     end
     res
 end
 
-function update_user(U, M, RT, nzM, u, nnzU, lambdaI)
+function update_user(u::Int64)
+    c = fetch_compdata()
+    U = c.U
+    M = c.M
+    RT = c.RT
+    nzM = c.nzM
+    nnzU = c.nnzU
+    lambdaI = c.lambdaI
+
     nzmu = nzM[u]
     Mu = M[:, nzmu]
     vec = Mu * full(RT[nzmu, u])
@@ -142,45 +154,88 @@ function update_user(U, M, RT, nzM, u, nnzU, lambdaI)
     nothing
 end
 
-function update_movie(U, M, R, nzU, m, nnzM, lambdaI)
+function update_movie(m::Int64)
+    c = fetch_compdata()
+    U = c.U
+    M = c.M
+    R = c.R
+    nzU = c.nzU
+    nnzM = c.nnzM
+    lambdaI = c.lambdaI
+
     nzum = nzU[m]
     Um = U[nzum, :]
     Umt = Um'
     vec = Umt * full(R[nzum, m])
     mat = (Umt * Um) + (nnzM[m] * lambdaI)
     M[:,m] = mat \ vec
+    nothing
 end
 
 function fact(R::SparseMatrixCSC{Float64,Int64}, niters::Int, nfactors::Int64)
+    t1 = time()
+    println("preparing inputs")
     U, M, R = prep(R, nfactors)
     nusers, nmovies = size(R)
-    nnzU, nnzM = nnz_counts(R)   
+    nnzU, nnzM = nnz_counts(R)
 
     lambda = 0.065
     lambdaI = lambda * eye(nfactors)
 
     RT = R'
+    t2 = time()
     nzU = nnz_locs(R)
     nzM = nnz_locs(RT)
+    t3 = time()
+    println("prep times: $(t2-t1), $(t3-t2)")
     fact_iters(U, M, R, RT, nzU, nzM, niters, nusers, nmovies, nnzU, nnzM, lambdaI)
 end
 
-function fact_iters(_U, _M, _R, _RT, nzU, nzM, niters, nusers, nmovies, nnzU, nnzM, _lambdaI)
+type ComputeData
+    U::SharedArray{Float64,2}
+    M::SharedArray{Float64,2}
+    R::ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}
+    RT::ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}
+    lambdaI::SharedArray{Float64,2}
+    nzU::Dict{Int64,Vector{Int64}}
+    nzM::Dict{Int64,Vector{Int64}}
+    nnzU::Matrix{Int64}
+    nnzM::Matrix{Int64}
+end
+
+const compdata = ComputeData[]
+
+share_compdata(c::ComputeData) = (push!(compdata, c); nothing)
+fetch_compdata() = compdata[1]
+
+function fact_iters(_U::Matrix{Float64}, _M::Matrix{Float64}, _R::SparseMatrixCSC{Float64,Int64}, _RT::SparseMatrixCSC{Float64,Int64},
+            nzU::Dict{Int64,Vector{Int64}}, nzM::Dict{Int64,Vector{Int64}},
+            niters::Int64, nusers::Int64, nmovies::Int64, nnzU::Matrix{Int64}, nnzM::Matrix{Int64}, _lambdaI::Matrix{Float64})
+    t1 = time()
     U = share(_U)
     M = share(_M)
     R = share(_R)
     RT = share(_RT)
     lambdaI = share(_lambdaI)
 
+    c =ComputeData(U, M, R, RT, lambdaI, nzU, nzM, nnzU, nnzM)
+    for w in workers()
+        remotecall_fetch(share_compdata, w, c)
+    end
+
     for iter in 1:niters
+        println("iter $iter users")
         @sync @parallel for u in 1:nusers
-            update_user(U, M, RT, nzM, u, nnzU, lambdaI)
+            update_user(u)
         end
+        println("iter $iter movies")
         @sync @parallel for m in 1:nmovies
-            update_movie(U, M, R, nzU, m, nnzM, lambdaI)
+            update_movie(m)
         end
     end
 
+    t2 = time()
+    println("fact time $(t2-t1)")
     copy(U), copy(M)
 end
 
