@@ -1,5 +1,7 @@
 using ParallelSparseMatMul
 
+import Base: zero
+
 type FileSpec
     name::AbstractString
     dlm::Char
@@ -20,7 +22,7 @@ type Inputs
     movie_names::FileSpec
     ratings::FileSpec
     R::Nullable{SparseMatrixCSC{Float64,Int64}}
-    M::Nullable{Matrix}
+    M::Nullable{SparseVector{AbstractString,Int64}}
 
     function Inputs(movie_names::FileSpec, ratings::FileSpec)
         new(movie_names, ratings, nothing, nothing)
@@ -38,7 +40,7 @@ function ratings(inp::Inputs)
 
         # create a sparse matrix
         R = sparse(users, movies, ratings)
-        #R = filter_empty(R)
+        R = filter_empty(R)
         inp.R = Nullable(R)
     end
 
@@ -48,7 +50,13 @@ end
 function movie_names(inp::Inputs)
     if isnull(inp.M)
         A = read_input(inp.movie_names)
-        inp.M = Nullable(A)
+        movie_ids = convert(Array{Int}, A[:,1])
+        movie_names = convert(Array{AbstractString}, A[:,2])
+        movie_genres = convert(Array{AbstractString}, A[:,3])
+        movies = AbstractString[n*" - "*g for (n,g) in zip(movie_names, movie_genres)]
+        #movies = [zip(movie_names,movie_genres)...]
+        M = SparseVector(maximum(movie_ids), movie_ids, movies)
+        inp.M = Nullable(M)
     end
 
     get(inp.M)
@@ -69,7 +77,11 @@ type MovieALSRec
 end
 
 function train(als::MovieALSRec, niters::Int, nfactors::Int64)
+    println("reading inputs")
+    t1 = time()
     R = ratings(als.inp)
+    t2 = time()
+    println("read time: $(t2-t1)")
     U, M = fact(R, niters, nfactors)
     model = Model(U, M)
     als.model = Nullable(model)
@@ -115,75 +127,127 @@ function prep(R::SparseMatrixCSC{Float64,Int64}, nfactors::Int)
     U, M, R
 end
 
-function nnz_counts(R::SparseMatrixCSC{Float64,Int64})
-    r, c, v = findnz(R)
-    S = sparse(r, c, 1)
-
-    nnzM = sum(S, 1)
-    nnzU = sum(S, 2)
-
-    nnzU, nnzM
+function sprows(R::Union{SparseMatrixCSC{Float64,Int64},ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}}, col::Int64)
+    rowstart = R.colptr[col]
+    rowend = R.colptr[col+1] - 1
+    rows = R.rowval[rowstart:rowend]
+    vals = R.nzval[rowstart:rowend]
+    rows, vals
 end
 
-function nnz_locs(R::SparseMatrixCSC{Float64,Int64})
-    res = Dict{Int64,Any}()
-    for idx in 1:size(R,2)
-        res[idx] = find(full(R[:,idx]))
-    end
-    res
-end
+function update_user(u::Int64)
+    c = fetch_compdata()
+    U = c.U
+    M = c.M
+    RT = c.RT
+    lambdaI = c.lambdaI
 
-function update_user(U, M, RT, nzM, u, nnzU, lambdaI)
-    nzmu = nzM[u]
-    Mu = M[:, nzmu]
-    vec = Mu * full(RT[nzmu, u])
-    mat = (Mu * Mu') + (nnzU[u] * lambdaI)
+    nzrows, nzvals = sprows(RT, u)
+    Mu = M[:, nzrows]
+    vec = Mu * nzvals
+    mat = (Mu * Mu') + (length(nzrows) * lambdaI)
     U[u,:] = mat \ vec
     nothing
 end
 
-function update_movie(U, M, R, nzU, m, nnzM, lambdaI)
-    nzum = nzU[m]
-    Um = U[nzum, :]
+function update_movie(m::Int64)
+    c = fetch_compdata()
+    U = c.U
+    M = c.M
+    R = c.R
+    lambdaI = c.lambdaI
+
+    nzrows, nzvals = sprows(R, m)
+    Um = U[nzrows, :]
     Umt = Um'
-    vec = Umt * full(R[nzum, m])
-    mat = (Umt * Um) + (nnzM[m] * lambdaI)
+    vec = Umt * nzvals
+    mat = (Umt * Um) + (length(nzrows) * lambdaI)
     M[:,m] = mat \ vec
+    nothing
 end
 
 function fact(R::SparseMatrixCSC{Float64,Int64}, niters::Int, nfactors::Int64)
+    t1 = time()
+    println("preparing inputs")
     U, M, R = prep(R, nfactors)
     nusers, nmovies = size(R)
-    nnzU, nnzM = nnz_counts(R)   
 
     lambda = 0.065
     lambdaI = lambda * eye(nfactors)
 
     RT = R'
-    nzU = nnz_locs(R)
-    nzM = nnz_locs(RT)
-    fact_iters(U, M, R, RT, nzU, nzM, niters, nusers, nmovies, nnzU, nnzM, lambdaI)
+    t2 = time()
+    println("prep time: $(t2-t1)")
+    fact_iters(U, M, R, RT, niters, nusers, nmovies, lambdaI)
 end
 
-function fact_iters(_U, _M, _R, _RT, nzU, nzM, niters, nusers, nmovies, nnzU, nnzM, _lambdaI)
+type ComputeData
+    U::SharedArray{Float64,2}
+    M::SharedArray{Float64,2}
+    R::ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}
+    RT::ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}
+    lambdaI::SharedArray{Float64,2}
+end
+
+const compdata = ComputeData[]
+
+share_compdata(c::ComputeData) = (push!(compdata, c); nothing)
+fetch_compdata() = compdata[1]
+
+function fact_iters(_U::Matrix{Float64}, _M::Matrix{Float64}, _R::SparseMatrixCSC{Float64,Int64}, _RT::SparseMatrixCSC{Float64,Int64},
+            niters::Int64, nusers::Int64, nmovies::Int64, _lambdaI::Matrix{Float64})
+    t1 = time()
     U = share(_U)
     M = share(_M)
     R = share(_R)
     RT = share(_RT)
     lambdaI = share(_lambdaI)
 
+    c =ComputeData(U, M, R, RT, lambdaI)
+    for w in workers()
+        remotecall_fetch(share_compdata, w, c)
+    end
+
     for iter in 1:niters
+        println("iter $iter users")
         @sync @parallel for u in 1:nusers
-            update_user(U, M, RT, nzM, u, nnzU, lambdaI)
+            update_user(u)
         end
+        println("iter $iter movies")
         @sync @parallel for m in 1:nmovies
-            update_movie(U, M, R, nzU, m, nnzM, lambdaI)
+            update_movie(m)
         end
     end
 
+    t2 = time()
+    println("fact time $(t2-t1)")
     copy(U), copy(M)
 end
 
+function rmse(als)
+    t1 = time()
+    model = get(als.model)
+    U = share(model.U)
+    M = share(model.M)
+    R = share(ratings(als.inp))
+    RT = R'
+
+    cumerr = 0.0
+    for user in 1:size(RT, 2)
+        Uvec = reshape(U[user, :], 1, size(U, 2))
+
+        nzrows, nzvals = sprows(RT, user)
+        predicted = vec(Uvec*M)[nzrows]
+        err = sqrt(sum((predicted .- nzvals) .^ 2) / length(predicted))
+        cumerr += err
+        if user % 1000 == 0
+            println("user $user, err: $(sum(err)) cumerr: $cumerr")
+        end
+    end
+    cumerr
+end
+
+zero(::Type{AbstractString}) = ""
 function recommend(als::MovieALSRec, user::Int; unseen::Bool=true, count::Int=10)
     model = get(als.model)
     U = model.U
@@ -198,12 +262,14 @@ function recommend(als::MovieALSRec, user::Int; unseen::Bool=true, count::Int=10
     if unseen
         R = ratings(als.inp)
         # movies seen by user
-        seen = find(full(R[user,:]))
+        seen = full(R[user,:])
+        seen = find(seen)
 
         # filter out movies already seen
-        println("seen:")
-        println(mnames[seen, 2])
+        println("seen: $seen")
+        println(mnames[seen])
     end
 
-    mnames[top[1:count, :][:], 2]
+    movieids = top[1:count]
+    mnames[movieids]
 end
