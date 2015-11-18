@@ -229,20 +229,15 @@ function rmse(als)
     model = get(als.model)
     U = share(model.U)
     M = share(model.M)
-    R = share(ratings(als.inp))
-    RT = R'
 
-    cumerr = 0.0
-    for user in 1:size(RT, 2)
+    R = ratings(als.inp)
+    RT = share(R')
+
+    cumerr = @parallel (+) for user in 1:size(RT, 2)
         Uvec = reshape(U[user, :], 1, size(U, 2))
-
         nzrows, nzvals = sprows(RT, user)
         predicted = vec(Uvec*M)[nzrows]
-        err = sqrt(sum((predicted .- nzvals) .^ 2) / length(predicted))
-        cumerr += err
-        if user % 1000 == 0
-            println("user $user, err: $(sum(err)) cumerr: $cumerr")
-        end
+        sqrt(sum((predicted .- nzvals) .^ 2) / length(predicted))
     end
     cumerr
 end
