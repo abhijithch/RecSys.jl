@@ -40,7 +40,7 @@ function ratings(inp::Inputs)
 
         # create a sparse matrix
         R = sparse(users, movies, ratings)
-        #R = filter_empty(R)
+        R = filter_empty(R)
         inp.R = Nullable(R)
     end
 
@@ -127,25 +127,7 @@ function prep(R::SparseMatrixCSC{Float64,Int64}, nfactors::Int)
     U, M, R
 end
 
-function nnz_counts(R::SparseMatrixCSC{Float64,Int64})
-    r, c, v = findnz(R)
-    S = sparse(r, c, 1)
-
-    nnzM = sum(S, 1)
-    nnzU = sum(S, 2)
-
-    nnzU, nnzM
-end
-
-function nnz_locs(R::SparseMatrixCSC{Float64,Int64})
-    res = Dict{Int64,Vector{Int64}}()
-    for idx in 1:size(R,2)
-        res[idx] = find(full(R[:,idx]))
-    end
-    res
-end
-
-function sprows(R::ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}, col::Int64)
+function sprows(R::Union{SparseMatrixCSC{Float64,Int64},ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}}, col::Int64)
     rowstart = R.colptr[col]
     rowend = R.colptr[col+1] - 1
     rows = R.rowval[rowstart:rowend]
@@ -240,6 +222,29 @@ function fact_iters(_U::Matrix{Float64}, _M::Matrix{Float64}, _R::SparseMatrixCS
     t2 = time()
     println("fact time $(t2-t1)")
     copy(U), copy(M)
+end
+
+function rmse(als)
+    t1 = time()
+    model = get(als.model)
+    U = share(model.U)
+    M = share(model.M)
+    R = share(ratings(als.inp))
+    RT = R'
+
+    cumerr = 0.0
+    for user in 1:size(RT, 2)
+        Uvec = reshape(U[user, :], 1, size(U, 2))
+
+        nzrows, nzvals = sprows(RT, user)
+        predicted = vec(Uvec*M)[nzrows]
+        err = sqrt(sum((predicted .- nzvals) .^ 2) / length(predicted))
+        cumerr += err
+        if user % 1000 == 0
+            println("user $user, err: $(sum(err)) cumerr: $cumerr")
+        end
+    end
+    cumerr
 end
 
 zero(::Type{AbstractString}) = ""
