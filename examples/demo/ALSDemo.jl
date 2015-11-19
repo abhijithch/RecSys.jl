@@ -23,9 +23,10 @@ type Inputs
     ratings::FileSpec
     R::Nullable{SparseMatrixCSC{Float64,Int64}}
     M::Nullable{SparseVector{AbstractString,Int64}}
+    idmap::Nullable{Vector{Int64}}
 
     function Inputs(movie_names::FileSpec, ratings::FileSpec)
-        new(movie_names, ratings, nothing, nothing)
+        new(movie_names, ratings, nothing, nothing, nothing)
     end
 end
 
@@ -40,11 +41,12 @@ function ratings(inp::Inputs)
 
         # create a sparse matrix
         R = sparse(users, movies, ratings)
-        R = filter_empty(R)
+        R, idmap = filter_empty(R)
         inp.R = Nullable(R)
+        inp.idmap = Nullable(idmap)
     end
 
-    get(inp.R)
+    get(inp.R), get(inp.idmap)
 end
 
 function movie_names(inp::Inputs)
@@ -54,7 +56,6 @@ function movie_names(inp::Inputs)
         movie_names = convert(Array{AbstractString}, A[:,2])
         movie_genres = convert(Array{AbstractString}, A[:,3])
         movies = AbstractString[n*" - "*g for (n,g) in zip(movie_names, movie_genres)]
-        #movies = [zip(movie_names,movie_genres)...]
         M = SparseVector(maximum(movie_ids), movie_ids, movies)
         inp.M = Nullable(M)
     end
@@ -80,7 +81,7 @@ end
 function train(als::MovieALSRec, niters::Int, nfactors::Int64, lambda::Float64=0.065)
     println("reading inputs")
     t1 = time()
-    R = ratings(als.inp)
+    R, _idmap = ratings(als.inp)
     t2 = time()
     println("read time: $(t2-t1)")
     U, M = fact(R, niters, nfactors, lambda)
@@ -106,7 +107,7 @@ end
 ##
 # Training
 #
-# TODO:
+# Note:
 # Filtering out causes the movie and user ids to change.
 # We need to keep a mapping to be able to match in the recommend step.
 function filter_empty(R::SparseMatrixCSC{Float64,Int64})
@@ -119,7 +120,7 @@ function filter_empty(R::SparseMatrixCSC{Float64,Int64})
     non_empty_movies = find(M)
     R = R[non_empty_movies, :]
 
-    R'
+    R', non_empty_movies
 end
 
 function prep(R::SparseMatrixCSC{Float64,Int64}, nfactors::Int)
@@ -237,7 +238,7 @@ function rmse(als)
     U = share(model.U)
     M = share(model.M)
 
-    R = ratings(als.inp)
+    R, _idmap = ratings(als.inp)
     RT = share(R')
 
     cumerr = @parallel (.+) for user in 1:size(RT, 2)
@@ -261,18 +262,30 @@ function recommend(als::MovieALSRec, user::Int; unseen::Bool=true, count::Int=10
     top = sortperm(vec(Uvec*M))
 
     mnames = movie_names(als.inp)
+    R, idmap = ratings(als.inp)
 
     if unseen
-        R = ratings(als.inp)
         # movies seen by user
         seen = full(R[user,:])
         seen = find(seen)
 
         # filter out movies already seen
-        println("seen: $seen")
+        println("Items already rated by user:")
         println(mnames[seen])
+    else
+        seen = Int64[]
     end
 
-    movieids = top[1:count]
-    mnames[movieids]
+    recommended = Int64[]
+    idx = 1
+    while length(recommended) < count && length(top) >= idx
+        item_id = top[idx]
+        (item_id in seen) || push!(recommended, idmap[item_id])
+        idx += 1
+    end
+    if idx > (count + 1)
+        println("Excluded $(idx - count - 1) old items")
+    end
+
+    mnames[recommended]
 end
