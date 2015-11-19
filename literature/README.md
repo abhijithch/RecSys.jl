@@ -1,0 +1,2 @@
+- [R. Bell, Y. Koren, and C. Volinsky. Matrix Factorization Techniques for Recommender Systems](8.pdf)
+- [Y. Zhou, D. Wilkinson, R. Schreiber and R. Pan. Large-scale Parallel Collaborative Filtering for the Netflix Prize](33.pdf)
