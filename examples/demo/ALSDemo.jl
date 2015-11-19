@@ -65,6 +65,7 @@ end
 type Model
     U::Matrix{Float64}
     M::Matrix{Float64}
+    lambda::Float64
 end
 
 type MovieALSRec
@@ -76,14 +77,14 @@ type MovieALSRec
     end
 end
 
-function train(als::MovieALSRec, niters::Int, nfactors::Int64)
+function train(als::MovieALSRec, niters::Int, nfactors::Int64, lambda::Float64=0.065)
     println("reading inputs")
     t1 = time()
     R = ratings(als.inp)
     t2 = time()
     println("read time: $(t2-t1)")
-    U, M = fact(R, niters, nfactors)
-    model = Model(U, M)
+    U, M = fact(R, niters, nfactors, lambda)
+    model = Model(U, M, lambda)
     als.model = Nullable(model)
     nothing
 end
@@ -105,6 +106,9 @@ end
 ##
 # Training
 #
+# TODO:
+# Filtering out causes the movie and user ids to change.
+# We need to keep a mapping to be able to match in the recommend step.
 function filter_empty(R::SparseMatrixCSC{Float64,Int64})
     U = sum(R, 2)
     non_empty_users = find(U)
@@ -133,6 +137,7 @@ end
 function sprows(R::Union{SparseMatrixCSC{Float64,Int64},ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}}, col::Int64)
     rowstart = R.colptr[col]
     rowend = R.colptr[col+1] - 1
+    # use subarray?
     rows = R.rowval[rowstart:rowend]
     vals = R.nzval[rowstart:rowend]
     rows, vals
@@ -169,13 +174,12 @@ function update_movie(m::Int64)
     nothing
 end
 
-function fact(R::SparseMatrixCSC{Float64,Int64}, niters::Int, nfactors::Int64)
+function fact(R::SparseMatrixCSC{Float64,Int64}, niters::Int, nfactors::Int64, lambda::Float64)
     t1 = time()
     println("preparing inputs")
     U, M, R = prep(R, nfactors)
     nusers, nmovies = size(R)
 
-    lambda = 0.065
     lambdaI = lambda * eye(nfactors)
 
     RT = R'
@@ -236,13 +240,14 @@ function rmse(als)
     R = ratings(als.inp)
     RT = share(R')
 
-    cumerr = @parallel (+) for user in 1:size(RT, 2)
+    cumerr = @parallel (.+) for user in 1:size(RT, 2)
         Uvec = reshape(U[user, :], 1, size(U, 2))
         nzrows, nzvals = sprows(RT, user)
         predicted = vec(Uvec*M)[nzrows]
-        sqrt(sum((predicted .- nzvals) .^ 2) / length(predicted))
+        #sqrt(sum((predicted .- nzvals) .^ 2) / length(predicted))
+        [sum((predicted .- nzvals) .^ 2), length(predicted)]
     end
-    cumerr
+    sqrt(cumerr[1]/cumerr[2])
 end
 
 zero(::Type{AbstractString}) = ""
