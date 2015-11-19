@@ -110,9 +110,12 @@ function filter_empty(R::SparseMatrixCSC{Float64,Int64})
     non_empty_users = find(U)
     R = R[non_empty_users, :]
 
-    M = sum(R, 1)
+    R = R'
+    M = sum(R, 2)
     non_empty_movies = find(M)
-    R[:, non_empty_movies]
+    R = R[non_empty_movies, :]
+
+    R'
 end
 
 function prep(R::SparseMatrixCSC{Float64,Int64}, nfactors::Int)
