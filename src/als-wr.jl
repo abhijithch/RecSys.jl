@@ -1,7 +1,3 @@
-typealias RatingMatrix SparseMatrixCSC{Float64,Int64}
-typealias SharedRatingMatrix ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}
-abstract FileSpec
-
 # Note:
 # Filtering out causes the item and user ids to change.
 # We need to keep a mapping to be able to match in the recommend step.

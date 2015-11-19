@@ -8,6 +8,10 @@ export FileSpec, DlmFile, read_input
 export ALSWR, train, recommend, rmse, zero
 export save, load
 
+typealias RatingMatrix SparseMatrixCSC{Float64,Int64}
+typealias SharedRatingMatrix ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}
+abstract FileSpec
+
 include("als-wr.jl")
 include("utils.jl")
 
