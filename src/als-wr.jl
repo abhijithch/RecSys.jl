@@ -154,6 +154,7 @@ const compdata = ComputeData[]
 
 share_compdata(c::ComputeData) = (push!(compdata, c); nothing)
 fetch_compdata() = compdata[1]
+noop(args...) = nothing
 
 function fact_iters(_U::Matrix{Float64}, _I::Matrix{Float64}, _R::RatingMatrix, _RT::RatingMatrix,
             niters::Int64, nusers::Int64, nitems::Int64, _lambdaI::Matrix{Float64})
@@ -171,11 +172,11 @@ function fact_iters(_U::Matrix{Float64}, _I::Matrix{Float64}, _R::RatingMatrix, 
 
     for iter in 1:niters
         logmsg("iter $iter users")
-        @sync @parallel for u in 1:nusers
+        @parallel (noop) for u in 1:nusers
             update_user(u)
         end
         logmsg("iter $iter items")
-        @sync @parallel for i in 1:nitems
+        @parallel (noop) for i in 1:nitems
             update_item(i)
         end
     end
