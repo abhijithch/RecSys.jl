@@ -227,5 +227,6 @@ function recommend(als::ALSWR, user::Int; unrated::Bool=true, count::Int=10)
     end
     nexcl = idx - count - 1
 
-    recommended, rated, nexcl
+    mapped_rated = Int64[item_idmap[id] for id in rated]
+    recommended, mapped_rated, nexcl
 end

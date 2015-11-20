@@ -2,6 +2,10 @@ using RecSys
 
 import RecSys: train, recommend, rmse
 
+if isless(Base.VERSION, v"0.5.0-")
+    using SparseVectors
+end
+
 type MovieRec
     movie_names::FileSpec
     rec::ALSWR
@@ -30,12 +34,25 @@ train(movierec::MovieRec, args...) = train(movierec.rec, args...)
 rmse(movierec::MovieRec) = rmse(movierec.rec)
 recommend(movierec::MovieRec, args...; kwargs...) = recommend(movierec.rec, args...; kwargs...)
 
+function print_list(mat::SparseVector, idxs::Vector{Int}, header::AbstractString)
+    if isless(Base.VERSION, v"0.5.0-")
+        if !isempty(idxs)
+            println(header)
+            for idx in idxs
+                println("[$idx] $(mat[idx])")
+            end
+        end
+    else
+        isempty(idxs) || println("$header\n$(mat[idxs])")
+    end
+end
+
 function print_recommendations(rec::MovieRec, recommended::Vector{Int}, watched::Vector{Int}, nexcl::Int)
     mnames = movie_names(rec)
 
-    isempty(watched) || println("Already watched:\n$(mnames[watched])")
+    print_list(mnames, watched, "Already watched:")
     (nexcl == 0) || println("Excluded $(nexcl) movies already watched")
-    println("Recommended:\n$(mnames[recommended])")
+    print_list(mnames, recommended, "Recommended:")
     nothing
 end
 

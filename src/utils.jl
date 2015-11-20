@@ -1,4 +1,4 @@
-zero(::Type{AbstractString}) = ""
+zero{T<:AbstractString}(::Type{T}) = convert(T, "")
 
 function save(model, filename::AbstractString)
     open(filename, "w") do f
