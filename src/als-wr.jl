@@ -47,13 +47,18 @@ function ratings(als::ALSWR)
         t1 = time()
         A = read_input(inp.ratings_file)
 
-        # separate the columns and make them of appropriate types
-        users   = convert(Vector{Int},     A[:,1])
-        items   = convert(Vector{Int},     A[:,2])
-        ratings = convert(Vector{Float64}, A[:,3])
+        if isa(A, SparseMatrixCSC)
+            R = convert(SparseMatrixCSC{Float64,Int64}, A)
+        else
+            # separate the columns and make them of appropriate types
+            users   = convert(Vector{Int64},     A[:,1])
+            items   = convert(Vector{Int64},     A[:,2])
+            ratings = convert(Vector{Float64}, A[:,3])
 
-        # create a sparse matrix
-        R = sparse(users, items, ratings)
+            # create a sparse matrix
+            R = sparse(users, items, ratings)
+        end
+
         R, item_idmap, user_idmap = filter_empty(R)
         inp.R = Nullable(R)
         inp.item_idmap = Nullable(item_idmap)

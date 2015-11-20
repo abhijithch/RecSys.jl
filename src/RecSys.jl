@@ -1,10 +1,11 @@
 module RecSys
 
 using ParallelSparseMatMul
+using MAT
 
 import Base: zero
 
-export FileSpec, DlmFile, read_input
+export FileSpec, DlmFile, MatFile, read_input
 export ALSWR, train, recommend, rmse, zero
 export save, load
 

@@ -28,3 +28,10 @@ function read_input(fspec::DlmFile)
     F = readdlm(fspec.name, fspec.dlm, header=fspec.header)
     fspec.header ? F[1] : F
 end
+
+type MatFile <: FileSpec
+    filename::AbstractString
+    entryname::AbstractString
+end
+
+read_input(fspec::MatFile) = read(matopen(fspec.filename), fspec.entryname)
