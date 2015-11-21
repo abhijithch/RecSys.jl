@@ -7,8 +7,8 @@ function filter_empty(R::RatingMatrix)
     R = R[non_empty_users, :]
 
     R = R'
-    I = sum(R, 2)
-    non_empty_items = find(I)
+    P = sum(R, 2)
+    non_empty_items = find(P)
     R = R[non_empty_items, :]
 
     R', non_empty_items, non_empty_users
@@ -27,7 +27,7 @@ end
 
 type Model
     U::Matrix{Float64}
-    I::Matrix{Float64}
+    P::Matrix{Float64}
     lambda::Float64
 end
 
@@ -72,8 +72,8 @@ end
 
 function train(als::ALSWR, niters::Int, nfactors::Int64, lambda::Float64=0.065)
     R, _i_idmap, _u_idmap = ratings(als)
-    U, I = fact(R, niters, nfactors, lambda)
-    model = Model(U, I, lambda)
+    U, P = fact(R, niters, nfactors, lambda)
+    model = Model(U, P, lambda)
     als.model = Nullable(model)
     nothing
 end
@@ -85,12 +85,12 @@ function prep(R::RatingMatrix, nfactors::Int)
     nusers, nitems = size(R)
 
     U = zeros(nusers, nfactors)
-    I = rand(nfactors, nitems)
+    P = rand(nfactors, nitems)
     for idx in 1:nitems
-        I[1,idx] = mean(nonzeros(R[:,idx]))
+        P[1,idx] = mean(nonzeros(R[:,idx]))
     end
 
-    U, I, R
+    U, P, R
 end
 
 function sprows(R::Union{RatingMatrix,SharedRatingMatrix}, col::Int64)
@@ -105,14 +105,14 @@ end
 function update_user(u::Int64)
     c = fetch_compdata()
     U = c.U
-    I = c.I
+    P = c.P
     RT = c.RT
     lambdaI = c.lambdaI
 
     nzrows, nzvals = sprows(RT, u)
-    Iu = I[:, nzrows]
-    vec = Iu * nzvals
-    mat = (Iu * Iu') + (length(nzrows) * lambdaI)
+    Pu = P[:, nzrows]
+    vec = Pu * nzvals
+    mat = (Pu * Pu') + (length(nzrows) * lambdaI)
     U[u,:] = mat \ vec
     nothing
 end
@@ -120,7 +120,7 @@ end
 function update_item(i::Int64)
     c = fetch_compdata()
     U = c.U
-    I = c.I
+    P = c.P
     R = c.R
     lambdaI = c.lambdaI
 
@@ -129,14 +129,14 @@ function update_item(i::Int64)
     Uit = Ui'
     vec = Uit * nzvals
     mat = (Uit * Ui) + (length(nzrows) * lambdaI)
-    I[:,i] = mat \ vec
+    P[:,i] = mat \ vec
     nothing
 end
 
 function fact(R::RatingMatrix, niters::Int, nfactors::Int64, lambda::Float64)
     t1 = time()
     logmsg("preparing inputs...")
-    U, I, R = prep(R, nfactors)
+    U, P, R = prep(R, nfactors)
     nusers, nitems = size(R)
 
     lambdaI = lambda * eye(nfactors)
@@ -144,12 +144,12 @@ function fact(R::RatingMatrix, niters::Int, nfactors::Int64, lambda::Float64)
     RT = R'
     t2 = time()
     logmsg("prep time: $(t2-t1)")
-    fact_iters(U, I, R, RT, niters, nusers, nitems, lambdaI)
+    fact_iters(U, P, R, RT, niters, nusers, nitems, lambdaI)
 end
 
 type ComputeData
     U::SharedArray{Float64,2}
-    I::SharedArray{Float64,2}
+    P::SharedArray{Float64,2}
     R::SharedRatingMatrix
     RT::SharedRatingMatrix
     lambdaI::SharedArray{Float64,2}
@@ -161,16 +161,16 @@ share_compdata(c::ComputeData) = (push!(compdata, c); nothing)
 fetch_compdata() = compdata[1]
 noop(args...) = nothing
 
-function fact_iters(_U::Matrix{Float64}, _I::Matrix{Float64}, _R::RatingMatrix, _RT::RatingMatrix,
+function fact_iters(_U::Matrix{Float64}, _P::Matrix{Float64}, _R::RatingMatrix, _RT::RatingMatrix,
             niters::Int64, nusers::Int64, nitems::Int64, _lambdaI::Matrix{Float64})
     t1 = time()
     U = share(_U)
-    I = share(_I)
+    P = share(_P)
     R = share(_R)
     RT = share(_RT)
     lambdaI = share(_lambdaI)
 
-    c = ComputeData(U, I, R, RT, lambdaI)
+    c = ComputeData(U, P, R, RT, lambdaI)
     for w in workers()
         remotecall_fetch(share_compdata, w, c)
     end
@@ -189,14 +189,14 @@ function fact_iters(_U::Matrix{Float64}, _I::Matrix{Float64}, _R::RatingMatrix, 
     t2 = time()
     logmsg("fact time $(t2-t1)")
 
-    copy(U), copy(I)
+    copy(U), copy(P)
 end
 
 function rmse(als::ALSWR)
     t1 = time()
     model = get(als.model)
     U = share(model.U)
-    I = share(model.I)
+    P = share(model.P)
 
     R, _i_idmap, _u_idmap = ratings(als)
     RT = share(R')
@@ -204,9 +204,10 @@ function rmse(als::ALSWR)
     cumerr = @parallel (.+) for user in 1:size(RT, 2)
         Uvec = reshape(U[user, :], 1, size(U, 2))
         nzrows, nzvals = sprows(RT, user)
-        predicted = vec(Uvec*I)[nzrows]
+        predicted = vec(Uvec*P)[nzrows]
         [sum((predicted .- nzvals) .^ 2), length(predicted)]
     end
+    logmsg("rmse time $(time()-t1)")
     sqrt(cumerr[1]/cumerr[2])
 end
 
@@ -217,11 +218,11 @@ function recommend(als::ALSWR, user::Int; unrated::Bool=true, count::Int=10)
 
     model = get(als.model)
     U = model.U
-    I = model.I
+    P = model.P
 
     # All the items sorted in decreasing order of rating.
     Uvec = reshape(U[user, :], 1, size(U, 2))
-    top = sortperm(vec(Uvec*I))
+    top = sortperm(vec(Uvec*P))
     rated = unrated ? find(full(R[user,:])) : Int64[]
 
     recommended = Int64[]
