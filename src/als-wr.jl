@@ -51,8 +51,8 @@ function ratings(als::ALSWR)
             R = convert(SparseMatrixCSC{Float64,Int64}, A)
         else
             # separate the columns and make them of appropriate types
-            users   = convert(Vector{Int64},     A[:,1])
-            items   = convert(Vector{Int64},     A[:,2])
+            users   = convert(Vector{Int64},   A[:,1])
+            items   = convert(Vector{Int64},   A[:,2])
             ratings = convert(Vector{Float64}, A[:,3])
 
             # create a sparse matrix
@@ -176,14 +176,15 @@ function fact_iters(_U::Matrix{Float64}, _P::Matrix{Float64}, _R::RatingMatrix, 
     end
 
     for iter in 1:niters
-        logmsg("iter $iter users")
+        logmsg("begin iteration $iter")
         @parallel (noop) for u in 1:nusers
             update_user(u)
         end
-        logmsg("iter $iter items")
+        logmsg("\tusers")
         @parallel (noop) for i in 1:nitems
             update_item(i)
         end
+        logmsg("\titems")
     end
 
     t2 = time()

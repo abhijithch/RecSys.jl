@@ -5,7 +5,7 @@ using MAT
 
 import Base: zero
 
-export FileSpec, DlmFile, MatFile, read_input
+export FileSpec, DlmFile, MatFile, SparseMat, read_input
 export ALSWR, train, recommend, rmse, zero
 export save, load
 

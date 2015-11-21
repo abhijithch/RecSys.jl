@@ -57,8 +57,8 @@ function print_recommendations(rec::MovieRec, recommended::Vector{Int}, watched:
 end
 
 function test(dataset_path)
-    ratings_file = DlmFile(joinpath(dataset_path, "ratings.csv"), ',', true)
-    movies_file = DlmFile(joinpath(dataset_path, "movies.csv"), ',', true)
+    ratings_file = DlmFile(joinpath(dataset_path, "ratings.csv"); dlm=',', header=true)
+    movies_file = DlmFile(joinpath(dataset_path, "movies.csv"); dlm=',', header=true)
     rec = MovieRec(ratings_file, movies_file)
     train(rec, 10, 4)
 
