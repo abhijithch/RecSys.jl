@@ -211,19 +211,8 @@ function rmse(als::ALSWR)
     sqrt(cumerr[1]/cumerr[2])
 end
 
-function recommend(als::ALSWR, user::Int; unrated::Bool=true, count::Int=10)
-    R, item_idmap, user_idmap = ratings(als)
-    (user in user_idmap) || (return (Int[], Int[], 0))
-    user = findfirst(user_idmap, user)
-
-    model = get(als.model)
-    U = model.U
-    P = model.P
-
-    # All the items sorted in decreasing order of rating.
-    Uvec = reshape(U[user, :], 1, size(U, 2))
+function _recommend(Uvec, P, rated, item_idmap; count::Int=10)
     top = sortperm(vec(Uvec*P))
-    rated = unrated ? find(full(R[user,:])) : Int64[]
 
     recommended = Int64[]
     idx = 1
@@ -236,4 +225,43 @@ function recommend(als::ALSWR, user::Int; unrated::Bool=true, count::Int=10)
 
     mapped_rated = Int64[item_idmap[id] for id in rated]
     recommended, mapped_rated, nexcl
+end
+
+function recommend(als::ALSWR, user::Int; unrated::Bool=true, count::Int=10)
+    R, item_idmap, user_idmap = ratings(als)
+    (user in user_idmap) || (return (Int[], Int[], 0))
+    user = findfirst(user_idmap, user)
+
+    model = get(als.model)
+    U = model.U
+    P = model.P
+
+    # All the items sorted in decreasing order of rating.
+    Uvec = reshape(U[user, :], 1, size(U, 2))
+    rated = unrated ? find(full(R[user,:])) : Int64[]
+
+    _recommend(Uvec, P, rated, item_idmap; count=count)
+end
+
+function recommend(als::ALSWR, user_ratings::SparseVector{Float64,Int64}; unrated::Bool=true, count::Int=10)
+    # R = U * P
+    # given a new row in R, figure out the corresponding row in U
+    #
+    # Rvec = Uvec * P
+    # Uvec = Rvec * Pinv
+    #
+    # since: I = (P * Pt) * inv(P * Pt)
+    # Pinv = Pt * inv(P * Pt)
+    #
+    # Uvec = Rvec * (Pt * inv(P * Pt))
+    _R, item_idmap, _user_idmap = ratings(als)
+    model = get(als.model)
+    P = model.P
+    PT = P'
+    Pinv = PT * inv(P * PT)
+    Rvec = reshape(user_ratings[item_idmap], 1, length(item_idmap))
+    #Rvec = reshape(user_ratings, 1, length(item_idmap))
+    Uvec = Rvec * Pinv
+
+    _recommend(Uvec, P, find(Rvec), item_idmap; count=count)
 end

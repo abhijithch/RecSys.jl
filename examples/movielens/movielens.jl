@@ -57,11 +57,27 @@ function print_recommendations(rec::MovieRec, recommended::Vector{Int}, watched:
 end
 
 function test(dataset_path)
-    ratings = DlmFile(joinpath(dataset_path, "ratings.csv"), ',', true)
-    movies = DlmFile(joinpath(dataset_path, "movies.csv"), ',', true)
-    rec = MovieRec(ratings, movies)
+    ratings_file = DlmFile(joinpath(dataset_path, "ratings.csv"), ',', true)
+    movies_file = DlmFile(joinpath(dataset_path, "movies.csv"), ',', true)
+    rec = MovieRec(ratings_file, movies_file)
     train(rec, 10, 4)
+
     err = rmse(rec)
     println("rmse of the model: $err")
+
+    println("recommending existing user:")
     print_recommendations(rec, recommend(rec, 100)...)
+
+    println("recommending anonymous user:")
+    R, item_idmap, user_idmap = RecSys.ratings(rec.rec)
+    # take user 100
+    actual_user = findfirst(user_idmap, 100)
+    ratings_anon = R[actual_user, :]
+    actual_movie_ids = item_idmap[find(full(ratings_anon))]
+    sp_ratings_anon = SparseVector(maximum(item_idmap), actual_movie_ids, nonzeros(ratings_anon))
+    print_recommendations(rec, recommend(rec, sp_ratings_anon)...)
+
+    println("saving model to model.sav")
+    save(rec, "model.sav")
+    nothing
 end
