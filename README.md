@@ -7,16 +7,21 @@ RecSys.jl is an implementation of the ALS-WR algorithm from
 
 ## Usage
 - Install: `Pkg.clone("https://github.com/abhijithch/RecSys.jl.git")`
-- Specify the training dataset.
+- Specify the training dataset in one of several ways:
     - Use delimited (CSV) file with columns: `user_id`, `item_id`, `ratings`. E.g.: `trainingset = DlmFile("ratings.csv", ',', true)`.
+    - Use a MAT file, specifying the file and entry name. E.g.: `trainingset = MatFile("ratings.mat", "training")`
     - Provide an implementation of `FileSpec` for any other format.
 - Initialize: `als = ALSWR(trainingset)`
 - Train: `train(als, num_iterations, num_factors, lambda)`
-- Check model error: `rmse(als)`, and repeat training with different parameters till satisfactory
+- Check model quality:
+    - `rmse(als)` to check against training dataset
+    - `rmse(als, testdataset)` to check against a test dataset
+    - and repeat training with different parameters till satisfactory
 - Save model: `save(als, filename)`
 - Load model: `als = load(filename)`
-- Get recommendations: `recommend(als, user_id)`
-- Get recommendations for a new/anonymous user: `recommend(als, user_ratings)`
+- Get recommendations:
+    - `recommend(als, user_id)` for an existing user
+    - `recommend(als, user_ratings)` for a new/anonymous user
 
 ## Examples
 See examples for more details:

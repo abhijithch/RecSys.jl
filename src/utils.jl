@@ -1,5 +1,6 @@
 zero{T<:AbstractString}(::Type{T}) = convert(T, "")
 
+# TODO: optimize save/load instead of a blind serialize call
 function save(model, filename::AbstractString)
     open(filename, "w") do f
         serialize(f, model)

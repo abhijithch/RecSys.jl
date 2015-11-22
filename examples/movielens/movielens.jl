@@ -31,7 +31,7 @@ function movie_names(rec::MovieRec)
 end
 
 train(movierec::MovieRec, args...) = train(movierec.rec, args...)
-rmse(movierec::MovieRec) = rmse(movierec.rec)
+rmse(movierec::MovieRec, args...; kwargs...) = rmse(movierec.rec, args...; kwargs...)
 recommend(movierec::MovieRec, args...; kwargs...) = recommend(movierec.rec, args...; kwargs...)
 
 function print_list(mat::SparseVector, idxs::Vector{Int}, header::AbstractString)

@@ -1,17 +1,27 @@
 # Note:
 # Filtering out causes the item and user ids to change.
 # We need to keep a mapping to be able to match in the recommend step.
-function filter_empty(R::RatingMatrix)
+function filter_empty(R::RatingMatrix; only_items::Vector{Int64}=Int64[])
+    if !isempty(only_items)
+        R = R'
+        R = R[only_items, :]
+        R = R'
+        non_empty_items = only_items
+    end
+
     U = sum(R, 2)
     non_empty_users = find(U)
     R = R[non_empty_users, :]
 
-    R = R'
-    P = sum(R, 2)
-    non_empty_items = find(P)
-    R = R[non_empty_items, :]
+    if isempty(only_items)
+        R = R'
+        P = sum(R, 2)
+        non_empty_items = find(P)
+        R = R[non_empty_items, :]
+        R = R'
+    end
 
-    R', non_empty_items, non_empty_users
+    R, non_empty_items, non_empty_users
 end
 
 type Inputs
@@ -40,8 +50,8 @@ type ALSWR
     end
 end
 
-function ratings(als::ALSWR)
-    inp = als.inp
+ratings(als::ALSWR) = ratings(als.inp)
+function ratings(inp::Inputs; only_items::Vector{Int64}=Int64[])
     if isnull(inp.R)
         logmsg("loading inputs...")
         t1 = time()
@@ -59,7 +69,7 @@ function ratings(als::ALSWR)
             R = sparse(users, items, ratings)
         end
 
-        R, item_idmap, user_idmap = filter_empty(R)
+        R, item_idmap, user_idmap = filter_empty(R; only_items=only_items)
         inp.R = Nullable(R)
         inp.item_idmap = Nullable(item_idmap)
         inp.user_idmap = Nullable(user_idmap)
@@ -194,12 +204,22 @@ function fact_iters(_U::Matrix{Float64}, _P::Matrix{Float64}, _R::RatingMatrix, 
 end
 
 function rmse(als::ALSWR)
+    R, _i_idmap, _u_idmap = ratings(als)
+    rmse(als, R)
+end
+
+function rmse(als::ALSWR, testdataset::FileSpec)
+    _R, i_idmap, _u_idmap = ratings(als)
+    R, _i_idmap, _u_idmap = ratings(Inputs(testdataset); only_items=i_idmap)
+    rmse(als, R)
+end
+
+function rmse(als::ALSWR, R::RatingMatrix)
     t1 = time()
+
     model = get(als.model)
     U = share(model.U)
     P = share(model.P)
-
-    R, _i_idmap, _u_idmap = ratings(als)
     RT = share(R')
 
     cumerr = @parallel (.+) for user in 1:size(RT, 2)
