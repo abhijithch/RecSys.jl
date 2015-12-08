@@ -187,13 +187,15 @@ function fact_iters(_U::Matrix{Float64}, _P::Matrix{Float64}, _R::RatingMatrix, 
 
     for iter in 1:niters
         logmsg("begin iteration $iter")
-        @parallel (noop) for u in 1:nusers
-            update_user(u)
-        end
+        pmap(update_user, 1:nusers)
+        #@parallel (noop) for u in 1:nusers
+        #    update_user(u)
+        #end
         logmsg("\tusers")
-        @parallel (noop) for i in 1:nitems
-            update_item(i)
-        end
+        pmap(update_item, 1:nitems)
+        #@parallel (noop) for i in 1:nitems
+        #    update_item(i)
+        #end
         logmsg("\titems")
     end
 
