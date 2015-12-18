@@ -3,6 +3,10 @@ module RecSys
 using ParallelSparseMatMul
 using MAT
 
+if isless(Base.VERSION, v"0.5.0-")
+    using SparseVectors
+end
+
 import Base: zero
 
 export FileSpec, DlmFile, MatFile, SparseMat, read_input
