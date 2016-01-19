@@ -40,6 +40,12 @@ type Inputs
     end
 end
 
+function clear(inp::Inputs)
+    inp.R = nothing
+    inp.item_idmap = nothing
+    inp.user_idmap = nothing
+end
+
 type Model
     U::Matrix{Float64}
     P::Matrix{Float64}
@@ -53,6 +59,14 @@ type ALSWR{T<:Parallelism}
 end
 
 ALSWR{T<:Parallelism}(inp::FileSpec, par::T=ParShmem()) = ALSWR{T}(Inputs(inp), nothing, par)
+
+function save(model::ALSWR, filename::AbstractString)
+    clear(model.inp)
+    open(filename, "w") do f
+        serialize(f, model)
+    end
+    nothing
+end
 
 ratings(als::ALSWR) = ratings(als.inp)
 function ratings(inp::Inputs; only_items::Vector{Int64}=Int64[])
