@@ -8,7 +8,6 @@ if isless(Base.VERSION, v"0.5.0-")
 end
 
 import Base: zero
-import ParallelSparseMatMul: share
 
 export FileSpec, DlmFile, MatFile, SparseMat, read_input
 export ALSWR, train, recommend, rmse, zero
@@ -19,6 +18,7 @@ typealias RatingMatrix SparseMatrixCSC{Float64,Int64}
 typealias SharedRatingMatrix ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}
 typealias InputRatings Union{RatingMatrix,SharedRatingMatrix}
 typealias InputIdMap Union{Vector{Int64}, SharedVector{Int64}}
+typealias ModelFactor Union{Matrix{Float64}, SharedArray{Float64,2}}
 abstract FileSpec
 
 abstract Parallelism
@@ -31,6 +31,7 @@ export ParThread
 end
 
 include("input.jl")
+include("als_model.jl")
 include("als-wr.jl")
 include("utils.jl")
 

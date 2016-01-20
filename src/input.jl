@@ -17,7 +17,7 @@ function clear(inp::Inputs)
     inp.user_idmap = nothing
 end
 
-function share(inp::Inputs)
+function share!(inp::Inputs)
     R = get(inp.R)
     isa(R, SharedRatingMatrix) || (inp.R = share(R))
 
