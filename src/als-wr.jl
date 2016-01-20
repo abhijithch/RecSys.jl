@@ -1,51 +1,3 @@
-# Note:
-# Filtering out causes the item and user ids to change.
-# We need to keep a mapping to be able to match in the recommend step.
-function filter_empty(R::RatingMatrix; only_items::Vector{Int64}=Int64[])
-    if !isempty(only_items)
-        max_num_items = maximum(only_items)
-        if size(R, 2) < max_num_items
-            RI, RJ, RV = findnz(R)
-            R = sparse(RI, RJ, RV, size(R, 1), max_num_items)
-        end
-        R = R'
-        R = R[only_items, :]
-        R = R'
-        non_empty_items = only_items
-    end
-
-    U = sum(R, 2)
-    non_empty_users = find(U)
-    R = R[non_empty_users, :]
-
-    if isempty(only_items)
-        R = R'
-        P = sum(R, 2)
-        non_empty_items = find(P)
-        R = R[non_empty_items, :]
-        R = R'
-    end
-
-    R, non_empty_items, non_empty_users
-end
-
-type Inputs
-    ratings_file::FileSpec
-    R::Nullable{RatingMatrix}
-    item_idmap::Nullable{Vector{Int64}}
-    user_idmap::Nullable{Vector{Int64}}
-
-    function Inputs(file::FileSpec)
-        new(file, nothing, nothing, nothing)
-    end
-end
-
-function clear(inp::Inputs)
-    inp.R = nothing
-    inp.item_idmap = nothing
-    inp.user_idmap = nothing
-end
-
 type Model
     U::Matrix{Float64}
     P::Matrix{Float64}
@@ -68,39 +20,8 @@ function save(model::ALSWR, filename::AbstractString)
     nothing
 end
 
-ratings(als::ALSWR) = ratings(als.inp)
-function ratings(inp::Inputs; only_items::Vector{Int64}=Int64[])
-    if isnull(inp.R)
-        logmsg("loading inputs...")
-        t1 = time()
-        A = read_input(inp.ratings_file)
-
-        if isa(A, SparseMatrixCSC)
-            R = convert(SparseMatrixCSC{Float64,Int64}, A)
-        else
-            # separate the columns and make them of appropriate types
-            users   = convert(Vector{Int64},   A[:,1])
-            items   = convert(Vector{Int64},   A[:,2])
-            ratings = convert(Vector{Float64}, A[:,3])
-
-            # create a sparse matrix
-            R = sparse(users, items, ratings)
-        end
-
-        R, item_idmap, user_idmap = filter_empty(R; only_items=only_items)
-        inp.R = Nullable(R)
-        inp.item_idmap = Nullable(item_idmap)
-        inp.user_idmap = Nullable(user_idmap)
-        t2 = time()
-        logmsg("time to load inputs: $(t2-t1) secs")
-    end
-
-    get(inp.R), get(inp.item_idmap), get(inp.user_idmap)
-end
-
 function train(als::ALSWR, niters::Int, nfactors::Int64, lambda::Float64=0.065)
-    R, _i_idmap, _u_idmap = ratings(als)
-    U, P = fact(als.par, R, niters, nfactors, lambda)
+    U, P = fact(als, niters, nfactors, lambda)
     model = Model(U, P, lambda)
     als.model = Nullable(model)
     nothing
@@ -110,34 +31,26 @@ end
 ##
 # Training
 #
-function prep(R::RatingMatrix, nfactors::Int)
-    nusers, nitems = size(R)
+function prep(als::ALSWR, nfactors::Int)
+    nu = nusers(als.inp)
+    ni = nitems(als.inp)
 
-    U = zeros(nusers, nfactors)
-    P = rand(nfactors, nitems)
-    for idx in 1:nitems
-        P[1,idx] = mean(nonzeros(R[:,idx]))
+    U = zeros(nu, nfactors)
+    P = rand(nfactors, ni)
+    for idx in 1:ni
+        P[1,idx] = mean(all_user_ratings(als.inp, idx))
     end
 
-    U, P, R
-end
-
-function sprows(R::Union{RatingMatrix,SharedRatingMatrix}, col::Int64)
-    rowstart = R.colptr[col]
-    rowend = R.colptr[col+1] - 1
-    # use subarray?
-    rows = R.rowval[rowstart:rowend]
-    vals = R.nzval[rowstart:rowend]
-    rows, vals
+    U, P
 end
 
 function update_user(u::Int64)
     c = fetch_compdata()
-    update_user(u, c.U, c.P, c.RT, c.lambdaI)
+    update_user(u, c.U, c.P, c.inp, c.lambdaI)
 end
 
-function update_user(u::Int64, U, P, RT, lambdaI)
-    nzrows, nzvals = sprows(RT, u)
+function update_user(u::Int64, U, P, inp, lambdaI)
+    nzrows, nzvals = items_and_ratings(inp, u)
     Pu = P[:, nzrows]
     vec = Pu * nzvals
     mat = (Pu * Pu') + (length(nzrows) * lambdaI)
@@ -147,11 +60,11 @@ end
 
 function update_item(i::Int64)
     c = fetch_compdata()
-    update_item(i::Int64, c.U, c.P, c.R, c.lambdaI)
+    update_item(i::Int64, c.U, c.P, c.inp, c.lambdaI)
 end
 
-function update_item(i::Int64, U, P, R, lambdaI)
-    nzrows, nzvals = sprows(R, i)
+function update_item(i::Int64, U, P, inp, lambdaI)
+    nzrows, nzvals = users_and_ratings(inp, i)
     Ui = U[nzrows, :]
     Uit = Ui'
     vec = Uit * nzvals
@@ -160,57 +73,60 @@ function update_item(i::Int64, U, P, R, lambdaI)
     nothing
 end
 
-function fact(par, R::RatingMatrix, niters::Int, nfactors::Int64, lambda::Float64)
+function fact(als::ALSWR, niters::Int, nfactors::Int64, lambda::Float64)
+    ensure_loaded(als.inp)
     t1 = time()
     logmsg("preparing inputs...")
-    U, P, R = prep(R, nfactors)
-    nusers, nitems = size(R)
-
+    U, P = prep(als, nfactors)
     lambdaI = lambda * eye(nfactors)
-
-    RT = R'
     t2 = time()
     logmsg("prep time: $(t2-t1)")
-    fact_iters(par, U, P, R, RT, niters, nusers, nitems, lambdaI)
+    fact_iters(als.par, U, P, als.inp, niters, lambdaI)
 end
 
 
 ##
 # Validation
 function rmse(als::ALSWR)
-    R, _i_idmap, _u_idmap = ratings(als)
-    rmse(als, R)
+    ensure_loaded(als.inp)
+    rmse(als, als.inp)
 end
 
 function rmse(als::ALSWR, testdataset::FileSpec)
-    _R, i_idmap, _u_idmap = ratings(als)
-    R, _i_idmap, _u_idmap = ratings(Inputs(testdataset); only_items=i_idmap)
-    rmse(als, R)
+    ensure_loaded(als.inp)
+    i_idmap = item_idmap(als.inp)
+
+    testinp = Inputs(testdataset)
+    ensure_loaded(testinp; only_items=i_idmap)
+    rmse(als, testinp)
 end
 
 
 ##
 # Recommendation
-function _recommend(Uvec, P, rated, item_idmap; count::Int=10)
+function _recommend(Uvec, P, rated, i_idmap; count::Int=10)
     top = sortperm(vec(Uvec*P))
 
     recommended = Int64[]
     idx = 1
     while length(recommended) < count && length(top) >= idx
         item_id = top[idx]
-        (item_id in rated) || push!(recommended, item_idmap[item_id])
+        (item_id in rated) || push!(recommended, i_idmap[item_id])
         idx += 1
     end
     nexcl = idx - count - 1
 
-    mapped_rated = Int64[item_idmap[id] for id in rated]
+    mapped_rated = Int64[i_idmap[id] for id in rated]
     recommended, mapped_rated, nexcl
 end
 
 function recommend(als::ALSWR, user::Int; unrated::Bool=true, count::Int=10)
-    R, item_idmap, user_idmap = ratings(als)
-    (user in user_idmap) || (return (Int[], Int[], 0))
-    user = findfirst(user_idmap, user)
+    ensure_loaded(als.inp)
+    i_idmap = item_idmap(als.inp)
+    u_idmap = user_idmap(als.inp)
+
+    (user in u_idmap) || (return (Int[], Int[], 0))
+    user = findfirst(u_idmap, user)
 
     model = get(als.model)
     U = model.U
@@ -218,9 +134,9 @@ function recommend(als::ALSWR, user::Int; unrated::Bool=true, count::Int=10)
 
     # All the items sorted in decreasing order of rating.
     Uvec = reshape(U[user, :], 1, size(U, 2))
-    rated = unrated ? find(full(R[user,:])) : Int64[]
+    rated = unrated ? all_items_rated(als.inp, user) : Int64[]
 
-    _recommend(Uvec, P, rated, item_idmap; count=count)
+    _recommend(Uvec, P, rated, i_idmap; count=count)
 end
 
 function recommend(als::ALSWR, user_ratings::SparseVector{Float64,Int64}; unrated::Bool=true, count::Int=10)
@@ -234,16 +150,17 @@ function recommend(als::ALSWR, user_ratings::SparseVector{Float64,Int64}; unrate
     # Pinv = Pt * inv(P * Pt)
     #
     # Uvec = Rvec * (Pt * inv(P * Pt))
-    _R, item_idmap, _user_idmap = ratings(als)
+    ensure_loaded(als.inp)
+    i_idmap = item_idmap(als.inp)
     model = get(als.model)
     P = model.P
     PT = P'
     Pinv = PT * inv(P * PT)
-    Rvec = reshape(user_ratings[item_idmap], 1, length(item_idmap))
-    #Rvec = reshape(user_ratings, 1, length(item_idmap))
+    Rvec = reshape(user_ratings[i_idmap], 1, length(i_idmap))
+    #Rvec = reshape(user_ratings, 1, length(i_idmap))
     Uvec = Rvec * Pinv
 
-    _recommend(Uvec, P, find(Rvec), item_idmap; count=count)
+    _recommend(Uvec, P, find(Rvec), i_idmap; count=count)
 end
 
 
@@ -253,8 +170,7 @@ end
 type ComputeData
     U::SharedArray{Float64,2}
     P::SharedArray{Float64,2}
-    R::SharedRatingMatrix
-    RT::SharedRatingMatrix
+    inp::Inputs
     lambdaI::SharedArray{Float64,2}
 end
 
@@ -264,29 +180,29 @@ share_compdata(c::ComputeData) = (push!(compdata, c); nothing)
 fetch_compdata() = compdata[1]
 noop(args...) = nothing
 
-function fact_iters{T<:ParShmem}(::T, _U::Matrix{Float64}, _P::Matrix{Float64}, _R::RatingMatrix, _RT::RatingMatrix,
-            niters::Int64, nusers::Int64, nitems::Int64, _lambdaI::Matrix{Float64})
+function fact_iters{T<:ParShmem}(::T, _U::Matrix{Float64}, _P::Matrix{Float64}, inp::Inputs, niters::Int64, _lambdaI::Matrix{Float64})
     t1 = time()
     U = share(_U)
     P = share(_P)
-    R = share(_R)
-    RT = share(_RT)
     lambdaI = share(_lambdaI)
+    share(inp)
 
-    c = ComputeData(U, P, R, RT, lambdaI)
+    c = ComputeData(U, P, inp, lambdaI)
     for w in workers()
         remotecall_fetch(share_compdata, w, c)
     end
 
+    nu = nusers(inp)
+    ni = nitems(inp)
     for iter in 1:niters
         logmsg("begin iteration $iter")
-        pmap(update_user, 1:nusers)
-        #@parallel (noop) for u in 1:nusers
+        pmap(update_user, 1:nu)
+        #@parallel (noop) for u in 1:nu
         #    update_user(u)
         #end
         logmsg("\tusers")
-        pmap(update_item, 1:nitems)
-        #@parallel (noop) for i in 1:nitems
+        pmap(update_item, 1:ni)
+        #@parallel (noop) for i in 1:ni
         #    update_item(i)
         #end
         logmsg("\titems")
@@ -298,17 +214,17 @@ function fact_iters{T<:ParShmem}(::T, _U::Matrix{Float64}, _P::Matrix{Float64}, 
     copy(U), copy(P)
 end
 
-function rmse{T<:ParShmem}(als::ALSWR{T}, R::RatingMatrix)
+function rmse{T<:ParShmem}(als::ALSWR{T}, inp::Inputs)
     t1 = time()
 
     model = get(als.model)
     U = share(model.U)
     P = share(model.P)
-    RT = share(R')
+    share(inp)
 
-    cumerr = @parallel (.+) for user in 1:size(RT, 2)
+    cumerr = @parallel (.+) for user in 1:nusers(inp)
         Uvec = reshape(U[user, :], 1, size(U, 2))
-        nzrows, nzvals = sprows(RT, user)
+        nzrows, nzvals = items_and_ratings(inp, user)
         predicted = vec(Uvec*P)[nzrows]
         [sum((predicted .- nzvals) .^ 2), length(predicted)]
     end
@@ -321,33 +237,34 @@ end
 # Thread parallelism
 if (Base.VERSION >= v"0.5.0-")
 
-function thread_update_item(U::Matrix{Float64}, P::Matrix{Float64}, R::RatingMatrix, nitems::Int64, lambdaI::Matrix{Float64})
-    @threads for i in Int64(1):nitems
-        update_item(i, U, P, R, lambdaI)
+function thread_update_item(U::Matrix{Float64}, P::Matrix{Float64}, inp::Inputs, ni::Int64, lambdaI::Matrix{Float64})
+    @threads for i in Int64(1):ni
+        update_item(i, U, P, inp, lambdaI)
     end
     nothing
 end
 
-function thread_update_user(U::Matrix{Float64}, P::Matrix{Float64}, RT::RatingMatrix, nusers::Int64, lambdaI::Matrix{Float64})
-    @threads for u in Int64(1):nusers
-        update_user(u, U, P, RT, lambdaI)
+function thread_update_user(U::Matrix{Float64}, P::Matrix{Float64}, inp::Inputs, nu::Int64, lambdaI::Matrix{Float64})
+    @threads for u in Int64(1):nu
+        update_user(u, U, P, inp, lambdaI)
     end
     nothing
 end
-function fact_iters{T<:ParThread}(::T, U::Matrix{Float64}, P::Matrix{Float64}, R::RatingMatrix, RT::RatingMatrix,
-            niters::Int64, nusers::Int64, nitems::Int64, lambdaI::Matrix{Float64})
+function fact_iters{T<:ParThread}(::T, U::Matrix{Float64}, P::Matrix{Float64}, inp::Inputs, niters::Int64, lambdaI::Matrix{Float64})
     t1 = time()
 
+    nu = nusers(inp)
+    ni = nitems(inp)
     for iter in 1:niters
         logmsg("begin iteration $iter")
         # gc is not threadsafe yet. issue #10317
         gc_enable(false)
-        thread_update_user(U, P, RT, nusers, lambdaI)
+        thread_update_user(U, P, inp, nu, lambdaI)
         gc_enable(true)
         gc()
         gc_enable(false)
         logmsg("\tusers")
-        thread_update_item(U, P, R, nitems, lambdaI)
+        thread_update_item(U, P, inp, ni, lambdaI)
         gc_enable(true)
         gc()
         logmsg("\titems")
@@ -359,26 +276,25 @@ function fact_iters{T<:ParThread}(::T, U::Matrix{Float64}, P::Matrix{Float64}, R
     U, P
 end
 
-function rmse{T<:ParThread}(als::ALSWR{T}, R::RatingMatrix)
+function rmse{T<:ParThread}(als::ALSWR{T}, inp::Inputs)
     t1 = time()
 
     model = get(als.model)
     U = model.U
     P = model.P
-    RT = R'
 
     errs = zeros(nthreads())
     lengths = zeros(Int, nthreads())
 
     pos = 1
     NU = size(U, 2)
-    N2 = size(RT, 2)
+    N2 = nusers(als.inp)
     while pos < N2
         endpos = min(pos+10000, N2)
         gc_enable(false)
         @threads for user in pos:endpos
             Uvec = reshape(U[user, :], 1, NU)
-            nzrows, nzvals = sprows(RT, user)
+            nzrows, nzvals = items_and_ratings(inp, user)
             predicted = vec(Uvec*P)[nzrows]
 
             tid = threadid()

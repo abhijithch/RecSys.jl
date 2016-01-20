@@ -69,12 +69,13 @@ function test(dataset_path)
     print_recommendations(rec, recommend(rec, 100)...)
 
     println("recommending anonymous user:")
-    R, item_idmap, user_idmap = RecSys.ratings(rec.rec)
+    u_idmap = RecSys.user_idmap(rec.rec.inp)
+    i_idmap = RecSys.item_idmap(rec.rec.inp)
     # take user 100
-    actual_user = findfirst(user_idmap, 100)
-    ratings_anon = R[actual_user, :]
-    actual_movie_ids = item_idmap[find(full(ratings_anon))]
-    sp_ratings_anon = SparseVector(maximum(item_idmap), actual_movie_ids, nonzeros(ratings_anon))
+    actual_user = findfirst(u_idmap, 100)
+    rated_anon, ratings_anon = RecSys.items_and_ratings(rec.rec.inp, actual_user)
+    actual_movie_ids = i_idmap[rated_anon]
+    sp_ratings_anon = SparseVector(maximum(i_idmap), actual_movie_ids, ratings_anon)
     print_recommendations(rec, recommend(rec, sp_ratings_anon)...)
 
     println("saving model to model.sav")
