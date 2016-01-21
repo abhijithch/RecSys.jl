@@ -1,10 +1,10 @@
-type ALSWR{T<:Parallelism}
-    inp::Inputs
-    model::Nullable{Model}
-    par::T
+type ALSWR{TP<:Parallelism,TI<:Inputs,TM<:Model}
+    inp::TI
+    model::Nullable{TM}
+    par::TP
 end
 
-ALSWR{T<:Parallelism}(inp::FileSpec, par::T=ParShmem()) = ALSWR{T}(Inputs(inp), nothing, par)
+ALSWR{TP<:Parallelism}(inp::FileSpec, par::TP=ParShmem()) = ALSWR{TP,SharedMemoryInputs,SharedMemoryModel}(SharedMemoryInputs(inp), nothing, par)
 
 function save(model::ALSWR, filename::AbstractString)
     clear(model.inp)
@@ -66,7 +66,7 @@ function rmse(als::ALSWR, testdataset::FileSpec)
     ensure_loaded(als.inp)
     i_idmap = item_idmap(als.inp)
 
-    testinp = Inputs(testdataset)
+    testinp = SharedMemoryInputs(testdataset)
     ensure_loaded(testinp; only_items=i_idmap)
     rmse(als, testinp)
 end
@@ -132,9 +132,9 @@ end
 
 ##
 # Shared memory parallelism
-type ComputeData
-    model::Model
-    inp::Inputs
+type ComputeData{TM<:Model,TI<:Inputs}
+    model::TM
+    inp::TI
     lambdaI::ModelFactor # store directly, avoid null check on every iteration
 end
 
@@ -144,7 +144,7 @@ share_compdata(c::ComputeData) = (push!(compdata, c); nothing)
 fetch_compdata() = compdata[1]
 noop(args...) = nothing
 
-function fact_iters{T<:ParShmem}(::T, model::Model, inp::Inputs, niters::Int64)
+function fact_iters{TP<:ParShmem,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, niters::Int64)
     t1 = time()
     share!(model)
     share!(inp)
@@ -177,7 +177,7 @@ function fact_iters{T<:ParShmem}(::T, model::Model, inp::Inputs, niters::Int64)
     nothing
 end
 
-function rmse{T<:ParShmem}(als::ALSWR{T}, inp::Inputs)
+function rmse{TP<:ParShmem,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
     t1 = time()
 
     model = get(als.model)
@@ -200,20 +200,20 @@ end
 # Thread parallelism
 if (Base.VERSION >= v"0.5.0-")
 
-function thread_update_item(model::Model, inp::Inputs, ni::Int64, lambdaI::Matrix{Float64})
+function thread_update_item{TM<:Model,TI<:Inputs}(model::TM, inp::TI, ni::Int64, lambdaI::Matrix{Float64})
     @threads for i in Int64(1):ni
         update_item(i, model, inp, lambdaI)
     end
     nothing
 end
 
-function thread_update_user(model::Model, inp::Inputs, nu::Int64, lambdaI::Matrix{Float64})
+function thread_update_user{TM<:Model,TI<:Inputs}(model::TM, inp::TI, nu::Int64, lambdaI::Matrix{Float64})
     @threads for u in Int64(1):nu
         update_user(u, model, inp, lambdaI)
     end
     nothing
 end
-function fact_iters{T<:ParThread}(::T, model::Model, inp::Inputs, niters::Int64)
+function fact_iters{TP<:ParThread,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, niters::Int64)
     t1 = time()
 
     nu = nusers(inp)
@@ -239,7 +239,7 @@ function fact_iters{T<:ParThread}(::T, model::Model, inp::Inputs, niters::Int64)
     nothing
 end
 
-function rmse{T<:ParThread}(als::ALSWR{T}, inp::Inputs)
+function rmse{TP<:ParThread,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
     t1 = time()
 
     model = get(als.model)

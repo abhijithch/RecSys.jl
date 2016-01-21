@@ -19,7 +19,10 @@ typealias SharedRatingMatrix ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,
 typealias InputRatings Union{RatingMatrix,SharedRatingMatrix}
 typealias InputIdMap Union{Vector{Int64}, SharedVector{Int64}}
 typealias ModelFactor Union{Matrix{Float64}, SharedArray{Float64,2}}
+
 abstract FileSpec
+abstract Inputs
+abstract Model
 
 abstract Parallelism
 type ParShmem <: Parallelism end

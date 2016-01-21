@@ -1,23 +1,23 @@
-type Inputs
+type SharedMemoryInputs <: Inputs
     ratings_file::FileSpec
     R::Nullable{InputRatings}
     RT::Nullable{InputRatings}
     item_idmap::Nullable{InputIdMap}
     user_idmap::Nullable{InputIdMap}
 
-    function Inputs(file::FileSpec)
+    function SharedMemoryInputs(file::FileSpec)
         new(file, nothing, nothing, nothing, nothing)
     end
 end
 
-function clear(inp::Inputs)
+function clear(inp::SharedMemoryInputs)
     inp.R = nothing
     inp.RT = nothing
     inp.item_idmap = nothing
     inp.user_idmap = nothing
 end
 
-function share!(inp::Inputs)
+function share!(inp::SharedMemoryInputs)
     R = get(inp.R)
     isa(R, SharedRatingMatrix) || (inp.R = share(R))
 
@@ -64,7 +64,7 @@ function filter_empty(R::RatingMatrix; only_items::Vector{Int64}=Int64[])
     R, non_empty_items, non_empty_users
 end
 
-function ensure_loaded(inp::Inputs; only_items::Vector{Int64}=Int64[])
+function ensure_loaded(inp::SharedMemoryInputs; only_items::Vector{Int64}=Int64[])
     if isnull(inp.R)
         logmsg("loading inputs...")
         t1 = time()
@@ -93,19 +93,19 @@ function ensure_loaded(inp::Inputs; only_items::Vector{Int64}=Int64[])
     nothing
 end
 
-item_idmap(inp::Inputs) = get(inp.item_idmap)
-user_idmap(inp::Inputs) = get(inp.user_idmap)
+item_idmap(inp::SharedMemoryInputs) = get(inp.item_idmap)
+user_idmap(inp::SharedMemoryInputs) = get(inp.user_idmap)
 
-nusers(inp::Inputs) = size(get(inp.R), 1)
-nitems(inp::Inputs) = size(get(inp.R), 2)
+nusers(inp::SharedMemoryInputs) = size(get(inp.R), 1)
+nitems(inp::SharedMemoryInputs) = size(get(inp.R), 2)
 
-users_and_ratings(inp::Inputs, i::Int64) = _sprowsvals(get(inp.R), i)
-all_user_ratings(inp::Inputs, i::Int64) = _spvals(get(inp.R), i)
-all_users_rated(inp::Inputs, i::Int64) = _sprows(get(inp.R), i)
+users_and_ratings(inp::SharedMemoryInputs, i::Int64) = _sprowsvals(get(inp.R), i)
+all_user_ratings(inp::SharedMemoryInputs, i::Int64) = _spvals(get(inp.R), i)
+all_users_rated(inp::SharedMemoryInputs, i::Int64) = _sprows(get(inp.R), i)
 
-items_and_ratings(inp::Inputs, u::Int64) = _sprowsvals(get(inp.RT), u)
-all_item_ratings(inp::Inputs, u::Int64) = _spvals(get(inp.RT), u)
-all_items_rated(inp::Inputs, u::Int64) = _sprows(get(inp.RT), u)
+items_and_ratings(inp::SharedMemoryInputs, u::Int64) = _sprowsvals(get(inp.RT), u)
+all_item_ratings(inp::SharedMemoryInputs, u::Int64) = _spvals(get(inp.RT), u)
+all_items_rated(inp::SharedMemoryInputs, u::Int64) = _sprows(get(inp.RT), u)
 
 function _sprowsvals(R::InputRatings, col::Int64)
     rowstart = R.colptr[col]

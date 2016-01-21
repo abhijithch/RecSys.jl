@@ -1,4 +1,4 @@
-type Model
+type SharedMemoryModel <: Model
     U::ModelFactor
     P::ModelFactor
     nfactors::Int
@@ -7,11 +7,11 @@ type Model
     Pinv::Nullable{ModelFactor}
 end
 
-nusers(model::Model) = size(model.U, 1)
-nitems(model::Model) = size(model.P, 2)
-nfactors(model::Model) = model.nfactors
+nusers(model::SharedMemoryModel) = size(model.U, 1)
+nitems(model::SharedMemoryModel) = size(model.P, 2)
+nfactors(model::SharedMemoryModel) = model.nfactors
 
-function share!(model::Model)
+function share!(model::SharedMemoryModel)
     isa(model.U, SharedArray) || (model.U = share(model.U))
     isa(model.P, SharedArray) || (model.P = share(model.P))
 
@@ -25,18 +25,18 @@ function share!(model::Model)
     nothing
 end
 
-function localize!(model::Model)
+function localize!(model::SharedMemoryModel)
     isa(model.U, SharedArray) && (model.U = copy(model.U))
     isa(model.P, SharedArray) && (model.P = copy(model.P))
     nothing
 end
 
-function clear(model::Model)
+function clear(model::SharedMemoryModel)
     model.lambdaI = nothing
     model.Pinv = nothing
 end
 
-function pinv(model::Model)
+function pinv(model::SharedMemoryModel)
     if isnull(model.Pinv)
         # since: I = (P * Pt) * inv(P * Pt)
         # Pinv = Pt * inv(P * Pt)
@@ -47,10 +47,10 @@ function pinv(model::Model)
     get(model.Pinv)
 end
 
-vec_mul_p(model::Model, v) = v * model.P
-vec_mul_pinv(model::Model, v) = v * pinv(model)
+vec_mul_p(model::SharedMemoryModel, v) = v * model.P
+vec_mul_pinv(model::SharedMemoryModel, v) = v * pinv(model)
 
-function prep(inp::Inputs, nfacts::Int, lambda::Float64)
+function prep{TI<:SharedMemoryInputs}(inp::TI, nfacts::Int, lambda::Float64)
     ensure_loaded(inp)
     t1 = time()
     logmsg("preparing inputs...")
@@ -65,22 +65,22 @@ function prep(inp::Inputs, nfacts::Int, lambda::Float64)
     end
 
     lambdaI = lambda * eye(nfacts)
-    model = Model(U, P, nfacts, lambda, lambdaI, nothing)
+    model = SharedMemoryModel(U, P, nfacts, lambda, lambdaI, nothing)
 
     t2 = time()
     logmsg("prep time: $(t2-t1)")
     model
 end
 
-@inline function setU(model::Model, u::Int64, vals)
+@inline function setU(model::SharedMemoryModel, u::Int64, vals)
     model.U[u,:] = vals
     nothing
 end
 
-@inline function setP(model::Model, i::Int64, vals)
+@inline function setP(model::SharedMemoryModel, i::Int64, vals)
     model.P[:,i] = vals
     nothing
 end
 
-getU(model::Model, users) = model.U[users, :]
-getP(model::Model, items) = model.P[:, items]
+getU(model::SharedMemoryModel, users) = model.U[users, :]
+getP(model::SharedMemoryModel, items) = model.P[:, items]
