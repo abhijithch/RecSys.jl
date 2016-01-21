@@ -132,10 +132,11 @@ function test(dataset_path)
     u_idmap = RecSys.user_idmap(rec.als.inp)
     i_idmap = RecSys.item_idmap(rec.als.inp)
     # take user 9875
-    actual_user = findfirst(u_idmap, 9875)
+    actual_user = isempty(u_idmap) ? 9875 : findfirst(u_idmap, 9875)
     rated_anon, ratings_anon = RecSys.items_and_ratings(rec.als.inp, actual_user)
-    actual_movie_ids = i_idmap[rated_anon]
-    sp_ratings_anon = SparseVector(maximum(i_idmap), actual_movie_ids, ratings_anon)
+    actual_music_ids = isempty(i_idmap) ? rated_anon : i_idmap[rated_anon]
+    nmusic = isempty(i_idmap) ? RecSys.nitems(rec.als.inp) : maximum(i_idmap)
+    sp_ratings_anon = SparseVector(nmusic, actual_music_ids, ratings_anon)
     print_recommendations(rec, recommend(rec, sp_ratings_anon)...)
 
     println("saving model to model.sav")

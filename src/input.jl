@@ -106,18 +106,20 @@ function ensure_loaded(inp::SharedMemoryInputs; only_items::Vector{Int64}=Int64[
         end
 
         R, item_idmap, user_idmap = filter_empty(R; only_items=only_items)
-        inp.R = Nullable(R)
-        inp.item_idmap = Nullable(item_idmap)
-        inp.user_idmap = Nullable(user_idmap)
-        inp.RT = Nullable(R')
+        inp.R = R
+        inp.item_idmap = (extrema(item_idmap) == (1,length(item_idmap))) ? nothing : item_idmap
+        inp.user_idmap = (extrema(user_idmap) == (1,length(user_idmap))) ? nothing : user_idmap
+        inp.RT = R'
         t2 = time()
+        isnull(inp.item_idmap) && logmsg("no need to map item_ids")
+        isnull(inp.user_idmap) && logmsg("no need to map user_ids")
         logmsg("time to load inputs: $(t2-t1) secs")
     end
     nothing
 end
 
-item_idmap(inp::SharedMemoryInputs) = get(inp.item_idmap)
-user_idmap(inp::SharedMemoryInputs) = get(inp.user_idmap)
+item_idmap(inp::SharedMemoryInputs) = isnull(inp.item_idmap) ? Int64[] : get(inp.item_idmap)
+user_idmap(inp::SharedMemoryInputs) = isnull(inp.user_idmap) ? Int64[] : get(inp.user_idmap)
 
 nusers(inp::SharedMemoryInputs) = size(get(inp.R), 1)
 nitems(inp::SharedMemoryInputs) = size(get(inp.R), 2)

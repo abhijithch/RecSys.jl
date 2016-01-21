@@ -91,12 +91,13 @@ function _recommend(Uvec, model, rated, i_idmap; count::Int=10)
     idx = 1
     while length(recommended) < count && length(top) >= idx
         item_id = top[idx]
-        (item_id in rated) || push!(recommended, i_idmap[item_id])
+        real_item_id = isempty(i_idmap) ? item_id : i_idmap[item_id]
+        (item_id in rated) || push!(recommended, real_item_id)
         idx += 1
     end
     nexcl = idx - count - 1
 
-    mapped_rated = Int64[i_idmap[id] for id in rated]
+    mapped_rated = isempty(i_idmap) ? rated : Int64[i_idmap[id] for id in rated]
     recommended, mapped_rated, nexcl
 end
 
@@ -105,8 +106,10 @@ function recommend(als::ALSWR, user::Int; unrated::Bool=true, count::Int=10)
     i_idmap = item_idmap(als.inp)
     u_idmap = user_idmap(als.inp)
 
-    (user in u_idmap) || (return (Int[], Int[], 0))
-    user = findfirst(u_idmap, user)
+    if !isempty(u_idmap)
+        (user in u_idmap) || (return (Int[], Int[], 0))
+        user = findfirst(u_idmap, user)
+    end
 
     model = get(als.model)
 
@@ -131,8 +134,8 @@ function recommend(als::ALSWR, user_ratings::SparseVector{Float64,Int64}; unrate
     ensure_loaded(als.inp)
     i_idmap = item_idmap(als.inp)
     model = get(als.model)
-    Rvec = reshape(user_ratings[i_idmap], 1, length(i_idmap))
-    #Rvec = reshape(user_ratings, 1, length(i_idmap))
+    mapped_ratings = isempty(i_idmap) ? full(user_ratings) : user_ratings[i_idmap]
+    Rvec = reshape(mapped_ratings, 1, length(mapped_ratings))
     Uvec = vec_mul_pinv(model, Rvec)
 
     _recommend(Uvec, model, find(Rvec), i_idmap; count=count)
