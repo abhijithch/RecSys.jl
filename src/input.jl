@@ -17,6 +17,29 @@ function clear(inp::SharedMemoryInputs)
     inp.user_idmap = nothing
 end
 
+function localize!(inp::SharedMemoryInputs)
+    if !isnull(inp.R)
+        R = get(inp.R)
+        isa(R, SharedRatingMatrix) && (inp.R = copy(R))
+    end
+
+    if !isnull(inp.RT)
+        RT = get(inp.RT)
+        isa(RT, SharedRatingMatrix) && (inp.RT = copy(RT))
+    end
+
+    if !isnull(inp.item_idmap)
+        item_idmap = get(inp.item_idmap)
+        isa(item_idmap, SharedVector) && (inp.item_idmap = copy(item_idmap))
+    end
+
+    if !isnull(inp.user_idmap)
+        user_idmap = get(inp.user_idmap)
+        isa(user_idmap, SharedVector) && (inp.user_idmap = copy(user_idmap))
+    end
+    nothing
+end
+
 function share!(inp::SharedMemoryInputs)
     R = get(inp.R)
     isa(R, SharedRatingMatrix) || (inp.R = share(R))

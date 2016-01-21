@@ -8,7 +8,7 @@ end
 
 type MovieRec
     movie_names::FileSpec
-    rec::ALSWR
+    als::ALSWR
     movie_mat::Nullable{SparseVector{AbstractString,Int64}}
 
     function MovieRec(trainingset::FileSpec, movie_names::FileSpec)
@@ -30,9 +30,9 @@ function movie_names(rec::MovieRec)
     get(rec.movie_mat)
 end
 
-train(movierec::MovieRec, args...) = train(movierec.rec, args...)
-rmse(movierec::MovieRec, args...; kwargs...) = rmse(movierec.rec, args...; kwargs...)
-recommend(movierec::MovieRec, args...; kwargs...) = recommend(movierec.rec, args...; kwargs...)
+train(movierec::MovieRec, args...) = train(movierec.als, args...)
+rmse(movierec::MovieRec, args...; kwargs...) = rmse(movierec.als, args...; kwargs...)
+recommend(movierec::MovieRec, args...; kwargs...) = recommend(movierec.als, args...; kwargs...)
 
 function print_list(mat::SparseVector, idxs::Vector{Int}, header::AbstractString)
     if isless(Base.VERSION, v"0.5.0-")
@@ -69,16 +69,18 @@ function test(dataset_path)
     print_recommendations(rec, recommend(rec, 100)...)
 
     println("recommending anonymous user:")
-    u_idmap = RecSys.user_idmap(rec.rec.inp)
-    i_idmap = RecSys.item_idmap(rec.rec.inp)
+    u_idmap = RecSys.user_idmap(rec.als.inp)
+    i_idmap = RecSys.item_idmap(rec.als.inp)
     # take user 100
     actual_user = findfirst(u_idmap, 100)
-    rated_anon, ratings_anon = RecSys.items_and_ratings(rec.rec.inp, actual_user)
+    rated_anon, ratings_anon = RecSys.items_and_ratings(rec.als.inp, actual_user)
     actual_movie_ids = i_idmap[rated_anon]
     sp_ratings_anon = SparseVector(maximum(i_idmap), actual_movie_ids, ratings_anon)
     print_recommendations(rec, recommend(rec, sp_ratings_anon)...)
 
     println("saving model to model.sav")
+    clear(rec.als)
+    localize!(rec.als)
     save(rec, "model.sav")
     nothing
 end

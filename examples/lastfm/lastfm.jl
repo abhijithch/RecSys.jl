@@ -10,7 +10,7 @@ type MusicRec
     trainingset::FileSpec
     artist_names::FileSpec
     artist_map::FileSpec
-    rec::ALSWR
+    als::ALSWR
     artist_mat::Nullable{Dict{Int64,AbstractString}}
 
     function MusicRec(trainingset::FileSpec, artist_names::FileSpec, artist_map::FileSpec)
@@ -92,9 +92,9 @@ function artist_names(rec::MusicRec)
     get(rec.artist_mat)
 end
 
-train(musicrec::MusicRec, args...) = train(musicrec.rec, args...)
-rmse(musicrec::MusicRec) = rmse(musicrec.rec)
-recommend(musicrec::MusicRec, args...; kwargs...) = recommend(musicrec.rec, args...; kwargs...)
+train(musicrec::MusicRec, args...) = train(musicrec.als, args...)
+rmse(musicrec::MusicRec) = rmse(musicrec.als)
+recommend(musicrec::MusicRec, args...; kwargs...) = recommend(musicrec.als, args...; kwargs...)
 
 function print_list(mat::Dict, idxs::Vector{Int}, header::AbstractString)
     if !isempty(idxs)
@@ -129,16 +129,18 @@ function test(dataset_path)
     print_recommendations(rec, recommend(rec, 9875)...)
 
     println("recommending anonymous user:")
-    u_idmap = RecSys.user_idmap(rec.rec.inp)
-    i_idmap = RecSys.item_idmap(rec.rec.inp)
+    u_idmap = RecSys.user_idmap(rec.als.inp)
+    i_idmap = RecSys.item_idmap(rec.als.inp)
     # take user 9875
     actual_user = findfirst(u_idmap, 9875)
-    rated_anon, ratings_anon = RecSys.items_and_ratings(rec.rec.inp, actual_user)
+    rated_anon, ratings_anon = RecSys.items_and_ratings(rec.als.inp, actual_user)
     actual_movie_ids = i_idmap[rated_anon]
     sp_ratings_anon = SparseVector(maximum(i_idmap), actual_movie_ids, ratings_anon)
     print_recommendations(rec, recommend(rec, sp_ratings_anon)...)
 
     println("saving model to model.sav")
+    clear(rec.als)
+    localize!(rec.als)
     save(rec, "model.sav")
     nothing
 end

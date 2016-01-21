@@ -12,7 +12,7 @@ import Base: zero
 export FileSpec, DlmFile, MatFile, SparseMat, read_input
 export ALSWR, train, recommend, rmse, zero
 export ParShmem
-export save, load
+export save, load, clear, localize!
 
 typealias RatingMatrix SparseMatrixCSC{Float64,Int64}
 typealias SharedRatingMatrix ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}

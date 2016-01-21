@@ -6,10 +6,20 @@ end
 
 ALSWR{TP<:Parallelism}(inp::FileSpec, par::TP=ParShmem()) = ALSWR{TP,SharedMemoryInputs,SharedMemoryModel}(SharedMemoryInputs(inp), nothing, par)
 
-function save(model::ALSWR, filename::AbstractString)
-    clear(model.inp)
+function clear(als::ALSWR)
+    clear(als.inp)
+    isnull(als.model) || clear(get(als.model))
+end
+
+function localize!(als::ALSWR)
+    localize!(als.inp)
+    isnull(als.model) || localize!(get(als.model))
+end
+
+function save(als::ALSWR, filename::AbstractString)
+    clear(als)
     open(filename, "w") do f
-        serialize(f, model)
+        serialize(f, als)
     end
     nothing
 end
