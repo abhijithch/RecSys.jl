@@ -17,11 +17,14 @@ type MusicRec
         T, N = map_artists(trainingset, artist_names, artist_map)
         new(trainingset, artist_names, artist_map, ALSWR(SparseMat(T)), Nullable(N))
     end
+    function MusicRec(user_item_ratings::FileSpec, item_user_ratings::FileSpec, artist_names::FileSpec, artist_map::FileSpec)
+        new(user_item_ratings, artist_names, artist_map, ALSWR(user_item_ratings, item_user_ratings, ParChunk()), nothing)
+    end
 end
 
 function read_artist_map(artist_map::FileSpec)
     t1 = time()
-    RecSys.logmsg("reading artist map")
+    RecSys.@logmsg("reading artist map")
     A = read_input(artist_map)
     valid = map(x->isa(x, Integer), A)
     valid = valid[:,1] & valid[:,2]
@@ -33,13 +36,13 @@ function read_artist_map(artist_map::FileSpec)
         good_id = Avalid[idx, 2]
         amap[bad_id] = good_id
     end
-    RecSys.logmsg("read artist map in $(time()-t1) secs")
+    RecSys.@logmsg("read artist map in $(time()-t1) secs")
     amap
 end
 
 function read_trainingset(trainingset::FileSpec, amap::Dict{Int64,Int64})
     t1 = time()
-    RecSys.logmsg("reading trainingset")
+    RecSys.@logmsg("reading trainingset")
     T = read_input(trainingset)
     for idx in 1:size(T,1)
         artist_id = T[idx,2]
@@ -51,13 +54,13 @@ function read_trainingset(trainingset::FileSpec, amap::Dict{Int64,Int64})
     artists = convert(Vector{Int64},   T[:,2])
     ratings = convert(Vector{Float64}, T[:,3])
     S = sparse(users, artists, ratings)
-    RecSys.logmsg("read trainingset in $(time()-t1) secs")
+    RecSys.@logmsg("read trainingset in $(time()-t1) secs")
     S
 end
 
 function read_artist_names(artist_names::FileSpec, amap::Dict{Int64,Int64})
     t1 = time()
-    RecSys.logmsg("reading artist names")
+    RecSys.@logmsg("reading artist names")
     A = read_input(artist_names)
     name_map = Dict{Int64,AbstractString}()
     for idx in 1:size(A,1)
@@ -72,7 +75,7 @@ function read_artist_names(artist_names::FileSpec, amap::Dict{Int64,Int64})
             name_map[artist_id] = artist_name
         end
     end
-    RecSys.logmsg("read artist names in $(time()-t1) secs")
+    RecSys.@logmsg("read artist names in $(time()-t1) secs")
     name_map
 end
 
@@ -124,7 +127,6 @@ function test(dataset_path)
 
     err = rmse(rec)
     println("rmse of the model: $err")
-
     println("recommending existing user:")
     print_recommendations(rec, recommend(rec, 9875)...)
 
@@ -143,5 +145,21 @@ function test(dataset_path)
     clear(rec.als)
     localize!(rec.als)
     save(rec, "model.sav")
+    nothing
+end
+
+function test_chunks(dataset_path, model_path)
+    user_item_ratings = SparseMatChunks(joinpath(dataset_path, "splits", "R_itemwise.meta"), 10)
+    item_user_ratings = SparseMatChunks(joinpath(dataset_path, "splits", "RT_userwise.meta"), 10)
+    artist_names = DlmFile(joinpath(dataset_path, "artist_data.txt"); dlm='\t', quotes=false)
+    artist_map = DlmFile(joinpath(dataset_path, "artist_alias.txt"))
+
+    rec = MusicRec(user_item_ratings, item_user_ratings, artist_names, artist_map)
+    train(rec, 20, 20, model_path, 10)
+
+    err = rmse(rec)
+    println("rmse of the model: $err")
+    println("recommending existing user:")
+    print_recommendations(rec, recommend(rec, 9875)...)
     nothing
 end

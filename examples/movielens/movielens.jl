@@ -14,6 +14,9 @@ type MovieRec
     function MovieRec(trainingset::FileSpec, movie_names::FileSpec)
         new(movie_names, ALSWR(trainingset), nothing)
     end
+    function MovieRec(user_item_ratings::FileSpec, item_user_ratings::FileSpec, movie_names::FileSpec)
+        new(movie_names, ALSWR(user_item_ratings, item_user_ratings, ParChunk()), nothing)
+    end
 end
 
 function movie_names(rec::MovieRec)
@@ -83,5 +86,21 @@ function test(dataset_path)
     clear(rec.als)
     localize!(rec.als)
     save(rec, "model.sav")
+    nothing
+end
+
+# prepare chunks for movielens dataset by running `split_movielens` from `playground/split_input.jl`
+function test_chunks(dataset_path, model_path)
+    user_item_ratings = SparseMatChunks(joinpath(dataset_path, "splits", "R_itemwise.meta"), 5)
+    item_user_ratings = SparseMatChunks(joinpath(dataset_path, "splits", "RT_userwise.meta"), 5)
+    movies_file = DlmFile(joinpath(dataset_path, "movies.csv"); dlm=',', header=true)
+    rec = MovieRec(user_item_ratings, item_user_ratings, movies_file)
+    train(rec, 10, 4, model_path, 10)
+
+    err = rmse(rec)
+    println("rmse of the model: $err")
+
+    println("recommending existing user:")
+    print_recommendations(rec, recommend(rec, 100)...)
     nothing
 end

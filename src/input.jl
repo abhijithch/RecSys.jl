@@ -97,7 +97,7 @@ end
 
 function ensure_loaded(inp::SharedMemoryInputs; only_items::Vector{Int64}=Int64[])
     if isnull(inp.R)
-        logmsg("loading inputs...")
+        @logmsg("loading inputs...")
         t1 = time()
         A = read_input(inp.ratings_file)
 
@@ -119,9 +119,9 @@ function ensure_loaded(inp::SharedMemoryInputs; only_items::Vector{Int64}=Int64[
         inp.user_idmap = (extrema(user_idmap) == (1,length(user_idmap))) ? nothing : user_idmap
         inp.RT = R'
         t2 = time()
-        isnull(inp.item_idmap) && logmsg("no need to map item_ids")
-        isnull(inp.user_idmap) && logmsg("no need to map user_ids")
-        logmsg("time to load inputs: $(t2-t1) secs")
+        isnull(inp.item_idmap) && @logmsg("no need to map item_ids")
+        isnull(inp.user_idmap) && @logmsg("no need to map user_ids")
+        @logmsg("time to load inputs: $(t2-t1) secs")
     end
     nothing
 end

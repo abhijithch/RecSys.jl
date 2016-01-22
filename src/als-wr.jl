@@ -4,7 +4,8 @@ type ALSWR{TP<:Parallelism,TI<:Inputs,TM<:Model}
     par::TP
 end
 
-ALSWR{TP<:Parallelism}(inp::FileSpec, par::TP=ParShmem()) = ALSWR{TP,SharedMemoryInputs,SharedMemoryModel}(SharedMemoryInputs(inp), nothing, par)
+ALSWR{TP<:ParShmem}(inp::FileSpec, par::TP=ParShmem()) = ALSWR{TP,SharedMemoryInputs,SharedMemoryModel}(SharedMemoryInputs(inp), nothing, par)
+ALSWR(user_item_ratings::FileSpec, item_user_ratings::FileSpec, par::ParChunk) = ALSWR{ParChunk,DistInputs,DistModel}(DistInputs(user_item_ratings, item_user_ratings), nothing, par)
 
 function clear(als::ALSWR)
     clear(als.inp)
@@ -30,6 +31,12 @@ function train(als::ALSWR, niters::Int, nfacts::Int64, lambda::Float64=0.065)
     nothing
 end
 
+function train(als::ALSWR{ParChunk,DistInputs,DistModel}, niters::Int, nfacts::Int64, model_dir::AbstractString, max_cache::Int=10, lambda::Float64=0.065)
+    als.model = prep(als.inp, nfacts, lambda, model_dir, max_cache)
+    fact_iters(als, niters)
+    nothing
+end
+
 fact_iters(als, niters) = fact_iters(als.par, get(als.model), als.inp, niters)
 
 ##
@@ -40,6 +47,13 @@ function update_user(u::Int64)
     update_user(u, c.model, c.inp, c.lambdaI)
 end
 
+function update_user(r::UnitRange)
+    c = fetch_compdata()
+    for u in r
+        update_user(u, c.model, c.inp, c.lambdaI)
+    end
+end
+
 function update_user(u::Int64, model, inp, lambdaI)
     nzrows, nzvals = items_and_ratings(inp, u)
     Pu = getP(model, nzrows)
@@ -47,6 +61,13 @@ function update_user(u::Int64, model, inp, lambdaI)
     mat = (Pu * Pu') + (length(nzrows) * lambdaI)
     setU(model, u, mat \ vec)
     nothing
+end
+
+function update_item(r::UnitRange)
+    c = fetch_compdata()
+    for i in r
+        update_item(i::Int64, c.model, c.inp, c.lambdaI)
+    end
 end
 
 function update_item(i::Int64)
@@ -153,9 +174,25 @@ end
 
 const compdata = ComputeData[]
 
-share_compdata(c::ComputeData) = (push!(compdata, c); nothing)
+function share_compdata(c::ComputeData)
+    push!(compdata, c)
+    ensure_loaded(c.inp)
+    ensure_loaded(c.model)
+    nothing
+end
 fetch_compdata() = compdata[1]
 noop(args...) = nothing
+
+function sync_model()
+    c = fetch_compdata()
+    sync!(c.model)
+end
+
+function sync_worker_models()
+    for w in workers()
+        remotecall_fetch(sync_model, w)
+    end
+end
 
 function fact_iters{TP<:ParShmem,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, niters::Int64)
     t1 = time()
@@ -169,33 +206,72 @@ function fact_iters{TP<:ParShmem,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI,
 
     nu = nusers(inp)
     ni = nitems(inp)
+    @logmsg("nusers: $nu, nitems: $ni")
     for iter in 1:niters
-        logmsg("begin iteration $iter")
+        @logmsg("begin iteration $iter")
         pmap(update_user, 1:nu)
         #@parallel (noop) for u in 1:nu
         #    update_user(u)
         #end
-        logmsg("\tusers")
+        @logmsg("\tusers")
         pmap(update_item, 1:ni)
         #@parallel (noop) for i in 1:ni
         #    update_item(i)
         #end
-        logmsg("\titems")
+        @logmsg("\titems")
     end
 
     localize!(model)
 
     t2 = time()
-    logmsg("fact time $(t2-t1)")
+    @logmsg("fact time $(t2-t1)")
     nothing
 end
 
-function rmse{TP<:ParShmem,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
+function fact_iters{TP<:ParChunk,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, niters::Int64)
+    t1 = time()
+
+    clear(inp)
+    share!(model)
+    share!(inp)
+
+    c = ComputeData(model, inp, get(model.lambdaI))
+    uranges = UnitRange[chunk.keyrange for chunk in get(model.U).chunks]
+    iranges = UnitRange[chunk.keyrange for chunk in get(model.P).chunks]
+    clear(model)
+
+    for w in workers()
+        remotecall_fetch(share_compdata, w, c)
+    end
+
+    nu = nusers(inp)
+    ni = nitems(inp)
+    @logmsg("nusers: $nu, nitems: $ni")
+    for iter in 1:niters
+        @logmsg("begin iteration $iter")
+        pmap(update_user, uranges)
+        sync_worker_models()
+        @logmsg("\tusers")
+        pmap(update_item, iranges)
+        sync_worker_models()
+        @logmsg("\titems")
+    end
+
+    localize!(model)
+
+    t2 = time()
+    @logmsg("fact time $(t2-t1)")
+    nothing
+end
+
+function rmse{TP<:Union{ParShmem,ParChunk},TI<:Inputs}(als::ALSWR{TP}, inp::TI)
     t1 = time()
 
     model = get(als.model)
     share!(model)
     share!(inp)
+    ensure_loaded(inp)
+    ensure_loaded(model)
 
     cumerr = @parallel (.+) for user in 1:nusers(inp)
         Uvec = reshape(getU(model,user), 1, nfactors(model))
@@ -204,7 +280,7 @@ function rmse{TP<:ParShmem,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
         [sum((predicted .- nzvals) .^ 2), length(predicted)]
     end
     localize!(model)
-    logmsg("rmse time $(time()-t1)")
+    @logmsg("rmse time $(time()-t1)")
     sqrt(cumerr[1]/cumerr[2])
 end
 
@@ -212,6 +288,8 @@ end
 ##
 # Thread parallelism
 if (Base.VERSION >= v"0.5.0-")
+
+ALSWR{TP<:ParThread}(inp::FileSpec, par::TP=ParShmem()) = ALSWR{TP,SharedMemoryInputs,SharedMemoryModel}(SharedMemoryInputs(inp), nothing, par)
 
 function thread_update_item{TM<:Model,TI<:Inputs}(model::TM, inp::TI, ni::Int64, lambdaI::Matrix{Float64})
     @threads for i in Int64(1):ni
@@ -233,22 +311,24 @@ function fact_iters{TP<:ParThread,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI
     ni = nitems(inp)
     lambdaI = get(model.lambdaI)
     for iter in 1:niters
-        logmsg("begin iteration $iter")
+        @logmsg("begin iteration $iter")
         # gc is not threadsafe yet. issue #10317
         gc_enable(false)
         thread_update_user(model, inp, nu, lambdaI)
+        sync!(model)
         gc_enable(true)
         gc()
         gc_enable(false)
-        logmsg("\tusers")
+        @logmsg("\tusers")
         thread_update_item(model, inp, ni, lambdaI)
+        sync!(model)
         gc_enable(true)
         gc()
-        logmsg("\titems")
+        @logmsg("\titems")
     end
 
     t2 = time()
-    logmsg("fact time $(t2-t1)")
+    @logmsg("fact time $(t2-t1)")
     nothing
 end
 
@@ -278,7 +358,7 @@ function rmse{TP<:ParThread,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
         gc()
         pos = endpos + 1
     end
-    logmsg("rmse time $(time()-t1)")
+    @logmsg("rmse time $(time()-t1)")
     sqrt(sum(errs)/sum(lengths))
 end
 end
