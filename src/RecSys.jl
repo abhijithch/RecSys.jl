@@ -31,6 +31,9 @@ if (Base.VERSION >= v"0.5.0-")
 using Base.Threads
 type ParThread <: Parallelism end
 export ParThread
+else
+macro threads(x)
+end
 end
 
 include("input.jl")
@@ -39,10 +42,10 @@ include("als-wr.jl")
 include("utils.jl")
 
 # enable logging only during debugging
-using Logging
-#const logger = Logging.configure(filename="recsys.log", level=DEBUG)
-const logger = Logging.configure(level=DEBUG)
-logmsg(s) = debug(s)
-#logmsg(s) = nothing
+#using Logging
+##const logger = Logging.configure(filename="recsys.log", level=DEBUG)
+#const logger = Logging.configure(level=DEBUG)
+#logmsg(s) = debug(s)
+logmsg(s) = nothing
 
 end
