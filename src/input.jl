@@ -41,17 +41,25 @@ function localize!(inp::SharedMemoryInputs)
 end
 
 function share!(inp::SharedMemoryInputs)
-    R = get(inp.R)
-    isa(R, SharedRatingMatrix) || (inp.R = share(R))
+    if !isnull(inp.R)
+        R = get(inp.R)
+        isa(R, SharedRatingMatrix) || (inp.R = share(R))
+    end
 
-    RT = get(inp.RT)
-    isa(RT, SharedRatingMatrix) || (inp.RT = share(RT))
+    if !isnull(inp.RT)
+        RT = get(inp.RT)
+        isa(RT, SharedRatingMatrix) || (inp.RT = share(RT))
+    end
 
-    item_idmap = get(inp.item_idmap)
-    isa(item_idmap, SharedVector) || (inp.item_idmap = share(item_idmap))
+    if !isnull(inp.item_idmap)
+        item_idmap = get(inp.item_idmap)
+        isa(item_idmap, SharedVector) || (inp.item_idmap = share(item_idmap))
+    end
 
-    user_idmap = get(inp.user_idmap)
-    isa(user_idmap, SharedVector) || (inp.user_idmap = share(user_idmap))
+    if !isnull(inp.user_idmap)
+        user_idmap = get(inp.user_idmap)
+        isa(user_idmap, SharedVector) || (inp.user_idmap = share(user_idmap))
+    end
 
     nothing
 end
