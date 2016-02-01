@@ -31,12 +31,6 @@ function train(als::ALSWR, niters::Int, nfacts::Int64, lambda::Float64=0.065)
     nothing
 end
 
-function train(als::ALSWR{ParChunk,DistInputs,DistModel}, niters::Int, nfacts::Int64, model_dir::AbstractString, max_cache::Int=10, lambda::Float64=0.065)
-    als.model = prep(als.inp, nfacts, lambda, model_dir, max_cache)
-    fact_iters(als, niters)
-    nothing
-end
-
 fact_iters(als, niters) = fact_iters(als.par, get(als.model), als.inp, niters)
 
 ##
@@ -228,6 +222,34 @@ function fact_iters{TP<:ParShmem,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI,
     nothing
 end
 
+function rmse{TP<:Union{ParShmem,ParChunk},TI<:Inputs}(als::ALSWR{TP}, inp::TI)
+    t1 = time()
+
+    model = get(als.model)
+    share!(model)
+    share!(inp)
+    ensure_loaded(inp)
+    ensure_loaded(model)
+
+    cumerr = @parallel (.+) for user in 1:nusers(inp)
+        Uvec = reshape(getU(model,user), 1, nfactors(model))
+        nzrows, nzvals = items_and_ratings(inp, user)
+        predicted = vec(vec_mul_p(model, Uvec))[nzrows]
+        [sum((predicted .- nzvals) .^ 2), length(predicted)]
+    end
+    localize!(model)
+    @logmsg("rmse time $(time()-t1)")
+    sqrt(cumerr[1]/cumerr[2])
+end
+
+##
+# Chunk based distributed memory parallelism
+function train(als::ALSWR{ParChunk,DistInputs,DistModel}, niters::Int, nfacts::Int64, model_dir::AbstractString, max_cache::Int=10, lambda::Float64=0.065)
+    als.model = prep(als.inp, nfacts, lambda, model_dir, max_cache)
+    fact_iters(als, niters)
+    nothing
+end
+
 function fact_iters{TP<:ParChunk,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, niters::Int64)
     t1 = time()
 
@@ -262,26 +284,6 @@ function fact_iters{TP<:ParChunk,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI,
     t2 = time()
     @logmsg("fact time $(t2-t1)")
     nothing
-end
-
-function rmse{TP<:Union{ParShmem,ParChunk},TI<:Inputs}(als::ALSWR{TP}, inp::TI)
-    t1 = time()
-
-    model = get(als.model)
-    share!(model)
-    share!(inp)
-    ensure_loaded(inp)
-    ensure_loaded(model)
-
-    cumerr = @parallel (.+) for user in 1:nusers(inp)
-        Uvec = reshape(getU(model,user), 1, nfactors(model))
-        nzrows, nzvals = items_and_ratings(inp, user)
-        predicted = vec(vec_mul_p(model, Uvec))[nzrows]
-        [sum((predicted .- nzvals) .^ 2), length(predicted)]
-    end
-    localize!(model)
-    @logmsg("rmse time $(time()-t1)")
-    sqrt(cumerr[1]/cumerr[2])
 end
 
 

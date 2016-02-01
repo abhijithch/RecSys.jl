@@ -117,6 +117,13 @@ function print_recommendations(rec::MusicRec, recommended::Vector{Int}, listened
     nothing
 end
 
+function print_recommendations(recommended::Vector{Int}, listened::Vector{Int}, nexcl::Int)
+    println("Already listened: $listened")
+    (nexcl == 0) || println("Excluded $(nexcl) artists already listened")
+    println("Recommended: $recommended")
+    nothing
+end
+
 function test(dataset_path)
     ratings_file = DlmFile(joinpath(dataset_path, "user_artist_data.txt"))
     artist_names = DlmFile(joinpath(dataset_path, "artist_data.txt"); dlm='\t', quotes=false)
@@ -148,9 +155,9 @@ function test(dataset_path)
     nothing
 end
 
-function test_chunks(dataset_path, model_path)
-    user_item_ratings = SparseMatChunks(joinpath(dataset_path, "splits", "R_itemwise.meta"), 10)
-    item_user_ratings = SparseMatChunks(joinpath(dataset_path, "splits", "RT_userwise.meta"), 10)
+function test_chunks(dataset_path, splits_dir, model_path)
+    user_item_ratings = SparseMatChunks(joinpath(dataset_path, splits_dir, "R_itemwise.meta"), 10)
+    item_user_ratings = SparseMatChunks(joinpath(dataset_path, splits_dir, "RT_userwise.meta"), 10)
     artist_names = DlmFile(joinpath(dataset_path, "artist_data.txt"); dlm='\t', quotes=false)
     artist_map = DlmFile(joinpath(dataset_path, "artist_alias.txt"))
 
@@ -160,6 +167,6 @@ function test_chunks(dataset_path, model_path)
     err = rmse(rec)
     println("rmse of the model: $err")
     println("recommending existing user:")
-    print_recommendations(rec, recommend(rec, 9875)...)
+    print_recommendations(recommend(rec, 9875)...)
     nothing
 end

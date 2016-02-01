@@ -16,22 +16,6 @@ function split_sparse(S, chunkmax, filepfx)
                 cfilename = "$(filepfx).$(chunknum)"
                 println(mfile, colstart, ",", col, ",", cfilename)
                 RecSys.mmap_csc_save(S[:, colstart:col], cfilename)
-                #open(cfilename, "w") do cfile
-                #    for cidx in colstart:col
-                #        rowstart = S.colptr[cidx]
-                #        rowend = S.colptr[cidx+1]-1
-                #        for ridx in rowstart:rowend
-                #            println(cfile, rowval[ridx], ",", cidx, ",", nzval[ridx])
-                #        end
-                #    end
-                #end
-                #    SC = sub(S, :, colstart:col)
-                #    R,C,NZ = findnz(SC)
-                #    print("... ")
-                #    for idx in 1:length(R)
-                #        println(cfile, R[idx], ",", C[idx], ",", NZ[idx])
-                #    end
-                #end
                 push!(splits, colstart:col)
                 colstart = col+1
                 count = npos
@@ -156,4 +140,43 @@ function test_dense_splits(dataset_path = "/tmp/test")
         @assert A.val[1] == Float64(idx)
         println(A.val[1])
     end
+end
+
+##
+# an easy way to generate somewhat relevant test data is to take an existing dataset and replicate
+# items and users based on existing data.
+function generate_test_data(setname::AbstractString, generated_data_path, original_data_path, mul_factor)
+    RecSys.@logmsg("generating $setname")
+    @assert mul_factor > 1
+    incf = RecSys.ChunkedFile(joinpath(original_data_path, "$(setname).meta"), UnitRange{Int64}, SparseMatrixCSC{Float64,Int}, 2)
+    outmetaname = joinpath(generated_data_path, "$(setname).meta")
+
+    outkeystart = 1
+    outfileidx = 1
+    open(outmetaname, "w") do outmeta
+        for chunk in incf.chunks
+            L = length(chunk.keyrange)
+            S = RecSys.data(chunk, incf.lrucache)
+            Sout = S
+            for x in 1:(mul_factor-1)
+                Sout = vcat(Sout, S)
+            end
+            outfname = joinpath(generated_data_path, "$(setname).$(outfileidx)")
+            outfileidx += 1
+            RecSys.mmap_csc_save(Sout, outfname)
+            for x in 1:mul_factor
+                println(outmeta, outkeystart, ",", outkeystart+L-1, ",", outfname)
+                RecSys.@logmsg("generated $setname $outkeystart:$(outkeystart+L-1) with size: $(size(Sout)) from size: $(size(S))")
+                outkeystart += L
+            end
+        end
+    end
+end
+
+function generate_test_data(generated_data_path = "/data/Work/datasets/last_fm_music_recommendation/profiledata_06-May-2005/splits2",
+        original_data_path = "/data/Work/datasets/last_fm_music_recommendation/profiledata_06-May-2005/splits",
+        mul_factor=2)
+    generate_test_data("R_itemwise", generated_data_path, original_data_path, mul_factor)
+    generate_test_data("RT_userwise", generated_data_path, original_data_path, mul_factor)
+    println("finished")
 end

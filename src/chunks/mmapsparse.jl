@@ -52,3 +52,11 @@ function sync!(spm::SparseMatrixCSC)
     Mmap.sync!(spm.nzval, Base.MS_SYNC | Base.MS_INVALIDATE)
     nothing
 end
+
+function load{T<:SparseMatrixCSC}(::Type{T}, chunk::Chunk)
+    #@logmsg("loading memory mapped sparse $(chunk.path)")
+    open(chunk.path) do f
+        seek(f, chunk.offset)
+        return mmap_csc_load(f)::T
+    end
+end

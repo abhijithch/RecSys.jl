@@ -51,12 +51,17 @@ macro logmsg(s)
 end
 
 
-include("chunk.jl")
-include("mmapsparse.jl")
-include("input.jl")
-include("dist_input.jl")
-include("als_model.jl")
-include("als_dist_model.jl")
+include("chunks/chunk.jl")
+include("chunks/csv.jl")
+include("chunks/mmapsparse.jl")
+include("chunks/mmapdense.jl")
+
+include("inputs/input.jl")
+include("inputs/dist_input.jl")
+
+include("models/als_model.jl")
+include("models/als_dist_model.jl")
+
 include("als-wr.jl")
 include("utils.jl")
 
