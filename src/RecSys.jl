@@ -9,9 +9,9 @@ end
 
 import Base: zero
 
-export FileSpec, DlmFile, MatFile, SparseMat, read_input
+export FileSpec, DlmFile, MatFile, SparseMat, SparseMatChunks, DenseMatChunks, read_input
 export ALSWR, train, recommend, rmse, zero
-export ParShmem
+export ParShmem, ParChunk
 export save, load, clear, localize!
 
 typealias RatingMatrix SparseMatrixCSC{Float64,Int64}
@@ -26,26 +26,43 @@ abstract Model
 
 abstract Parallelism
 type ParShmem <: Parallelism end
+type ParChunk <: Parallelism end
 
 if (Base.VERSION >= v"0.5.0-")
 using Base.Threads
 type ParThread <: Parallelism end
 export ParThread
 else
+threadid() = 1
 macro threads(x)
 end
 end
-
-include("input.jl")
-include("als_model.jl")
-include("als-wr.jl")
-include("utils.jl")
 
 # enable logging only during debugging
 #using Logging
 ##const logger = Logging.configure(filename="recsys.log", level=DEBUG)
 #const logger = Logging.configure(level=DEBUG)
-#logmsg(s) = debug(s)
-logmsg(s) = nothing
+#macro logmsg(s)
+#    quote
+#        debug("[", myid(), "-", threadid(), "] ", $(esc(s)))
+#    end
+#end
+macro logmsg(s)
+end
+
+
+include("chunks/chunk.jl")
+include("chunks/csv.jl")
+include("chunks/mmapsparse.jl")
+include("chunks/mmapdense.jl")
+
+include("inputs/input.jl")
+include("inputs/dist_input.jl")
+
+include("models/als_model.jl")
+include("models/als_dist_model.jl")
+
+include("als-wr.jl")
+include("utils.jl")
 
 end

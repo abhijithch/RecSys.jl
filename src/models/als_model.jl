@@ -30,10 +30,16 @@ function localize!(model::SharedMemoryModel)
     isa(model.P, SharedArray) && (model.P = copy(model.P))
     nothing
 end
+sync!(model::SharedMemoryModel) = nothing
 
 function clear(model::SharedMemoryModel)
     model.lambdaI = nothing
     model.Pinv = nothing
+end
+
+function ensure_loaded(model::SharedMemoryModel)
+    model.lambdaI = model.lambda * eye(model.nfactors)
+    nothing
 end
 
 function pinv(model::SharedMemoryModel)
@@ -50,10 +56,10 @@ end
 vec_mul_p(model::SharedMemoryModel, v) = v * model.P
 vec_mul_pinv(model::SharedMemoryModel, v) = v * pinv(model)
 
-function prep{TI<:SharedMemoryInputs}(inp::TI, nfacts::Int, lambda::Float64)
+function prep{TI<:Inputs}(inp::TI, nfacts::Int, lambda::Float64)
     ensure_loaded(inp)
     t1 = time()
-    logmsg("preparing inputs...")
+    @logmsg("preparing inputs...")
 
     nu = nusers(inp)
     ni = nitems(inp)
@@ -68,7 +74,7 @@ function prep{TI<:SharedMemoryInputs}(inp::TI, nfacts::Int, lambda::Float64)
     model = SharedMemoryModel(U, P, nfacts, lambda, lambdaI, nothing)
 
     t2 = time()
-    logmsg("prep time: $(t2-t1)")
+    @logmsg("prep time: $(t2-t1)")
     model
 end
 
