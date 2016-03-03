@@ -30,7 +30,6 @@ function localize!(model::SharedMemoryModel)
     isa(model.P, SharedArray) && (model.P = copy(model.P))
     nothing
 end
-sync!(model::SharedMemoryModel) = nothing
 
 function clear(model::SharedMemoryModel)
     model.lambdaI = nothing
@@ -52,8 +51,6 @@ function pinv(model::SharedMemoryModel)
     end
     get(model.Pinv)
 end
-
-vec_mul_p(model::SharedMemoryModel, v) = v * model.P
 vec_mul_pinv(model::SharedMemoryModel, v) = v * pinv(model)
 
 function prep{TI<:Inputs}(inp::TI, nfacts::Int, lambda::Float64)
@@ -77,16 +74,3 @@ function prep{TI<:Inputs}(inp::TI, nfacts::Int, lambda::Float64)
     @logmsg("prep time: $(t2-t1)")
     model
 end
-
-@inline function setU(model::SharedMemoryModel, u::Int64, vals)
-    model.U[u,:] = vals
-    nothing
-end
-
-@inline function setP(model::SharedMemoryModel, i::Int64, vals)
-    model.P[:,i] = vals
-    nothing
-end
-
-getU(model::SharedMemoryModel, users) = model.U[users, :]
-getP(model::SharedMemoryModel, items) = model.P[:, items]
