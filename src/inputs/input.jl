@@ -1,12 +1,14 @@
 type SharedMemoryInputs <: Inputs
     ratings_file::FileSpec
+    nusers::Int
+    nitems::Int
     R::Nullable{InputRatings}
     RT::Nullable{InputRatings}
     item_idmap::Nullable{InputIdMap}
     user_idmap::Nullable{InputIdMap}
 
     function SharedMemoryInputs(file::FileSpec)
-        new(file, nothing, nothing, nothing, nothing)
+        new(file, 0, 0, nothing, nothing, nothing, nothing)
     end
 end
 
@@ -115,6 +117,7 @@ function ensure_loaded(inp::SharedMemoryInputs; only_items::Vector{Int64}=Int64[
 
         R, item_idmap, user_idmap = filter_empty(R; only_items=only_items)
         inp.R = R
+        inp.nusers, inp.nitems = size(R)
         inp.item_idmap = (extrema(item_idmap) == (1,length(item_idmap))) ? nothing : item_idmap
         inp.user_idmap = (extrema(user_idmap) == (1,length(user_idmap))) ? nothing : user_idmap
         inp.RT = R'
@@ -128,35 +131,3 @@ end
 
 item_idmap(inp::SharedMemoryInputs) = isnull(inp.item_idmap) ? Int64[] : get(inp.item_idmap)
 user_idmap(inp::SharedMemoryInputs) = isnull(inp.user_idmap) ? Int64[] : get(inp.user_idmap)
-
-nusers(inp::SharedMemoryInputs) = size(get(inp.R), 1)
-nitems(inp::SharedMemoryInputs) = size(get(inp.R), 2)
-
-users_and_ratings(inp::SharedMemoryInputs, i::Int64) = _sprowsvals(get(inp.R), i)
-all_user_ratings(inp::SharedMemoryInputs, i::Int64) = _spvals(get(inp.R), i)
-all_users_rated(inp::SharedMemoryInputs, i::Int64) = _sprows(get(inp.R), i)
-
-items_and_ratings(inp::SharedMemoryInputs, u::Int64) = _sprowsvals(get(inp.RT), u)
-all_item_ratings(inp::SharedMemoryInputs, u::Int64) = _spvals(get(inp.RT), u)
-all_items_rated(inp::SharedMemoryInputs, u::Int64) = _sprows(get(inp.RT), u)
-
-function _sprowsvals(R::InputRatings, col::Int64)
-    rowstart = R.colptr[col]
-    rowend = R.colptr[col+1] - 1
-    # use subarray?
-    R.rowval[rowstart:rowend], R.nzval[rowstart:rowend]
-end
-
-function _sprows(R::InputRatings, col::Int64)
-    rowstart = R.colptr[col]
-    rowend = R.colptr[col+1] - 1
-    # use subarray?
-    R.rowval[rowstart:rowend]
-end
-
-function _spvals(R::InputRatings, col::Int64)
-    rowstart = R.colptr[col]
-    rowend = R.colptr[col+1] - 1
-    # use subarray?
-    R.nzval[rowstart:rowend]
-end
