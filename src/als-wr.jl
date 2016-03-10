@@ -311,15 +311,9 @@ function fact_iters{TP<:ParThread,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI
     for iter in 1:niters
         @logmsg("begin iteration $iter")
         # gc is not threadsafe yet. issue #10317
-        gc_enable(false)
         thread_update_user(model, inp, nu, lambdaI)
-        gc_enable(true)
-        gc()
-        gc_enable(false)
         @logmsg("\tusers")
         thread_update_item(model, inp, ni, lambdaI)
-        gc_enable(true)
-        gc()
         @logmsg("\titems")
     end
 
@@ -340,7 +334,6 @@ function rmse{TP<:ParThread,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
     N2 = nusers(als.inp)
     while pos < N2
         endpos = min(pos+10000, N2)
-        gc_enable(false)
         @threads for user in pos:endpos
             Uvec = reshape(getU(model, user), 1, NF)
             nzrows, nzvals = items_and_ratings(inp, user)
@@ -350,8 +343,6 @@ function rmse{TP<:ParThread,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
             lengths[tid] += length(predicted)
             errs[tid] += sum((predicted - nzvals) .^ 2)
         end
-        gc_enable(true)
-        gc()
         pos = endpos + 1
     end
     @logmsg("rmse time $(time()-t1)")
