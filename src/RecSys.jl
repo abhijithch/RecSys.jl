@@ -43,6 +43,11 @@ macro threads(x)
 end
 end
 
+function tstr()
+    t = time()
+    string(Libc.strftime("%Y-%m-%dT%H:%M:%S",t), Libc.strftime("%z",t)[1:end-2], ":", Libc.strftime("%z",t)[end-1:end])
+end
+
 # enable logging only during debugging
 #using Logging
 ##const logger = Logging.configure(filename="recsys.log", level=DEBUG)
@@ -56,7 +61,7 @@ macro logmsg(s)
 end
 #macro logmsg(s)
 #    quote
-#        info("[", myid(), "-", threadid(), "] ", $(esc(s)))
+#        info(tstr(), " [", myid(), "-", threadid(), "] ", $(esc(s)))
 #    end
 #end
 

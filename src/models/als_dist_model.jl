@@ -18,7 +18,7 @@ type DistModel <: Model
     Pinv::Nullable{ModelFactor}
 end
 
-nusers(model::DistModel) = size(get(model.U))[1]
+nusers(model::DistModel) = size(get(model.U))[2]
 nitems(model::DistModel) = size(get(model.P))[2]
 nfactors(model::DistModel) = model.nfactors
 
@@ -58,10 +58,10 @@ function prep{TI<:DistInputs}(inp::TI, nfacts::Int, lambda::Float64, model_dir::
     isdir(Udir.name) || mkdir(Udir.name)
     isdir(Pdir.name) || mkdir(Pdir.name)
 
-    Usz = (nu, nfacts)
+    Usz = (nfacts, nu)
     Psz = (nfacts, ni)
-    U = create(Udir, Float64, 1, Usz, zeros, min(_max_items(Float64,1,Usz), ceil(Int, nu/nworkers())))
-    P = create(Pdir, Float64, 2, Psz, rand, min(_max_items(Float64,2,Psz), ceil(Int, ni/nworkers())))
+    U = create(Udir, Float64, Usz, zeros, min(_max_items(Float64,Usz), ceil(Int, nu/nworkers())))
+    P = create(Pdir, Float64, Psz, rand, min(_max_items(Float64,Psz), ceil(Int, ni/nworkers())))
 
     for idx in 1:ni
         P[1,idx] = mean(all_user_ratings(inp, idx))

@@ -7,7 +7,7 @@ type SharedMemoryModel <: Model
     Pinv::Nullable{ModelFactor}
 end
 
-nusers(model::SharedMemoryModel) = size(model.U, 1)
+nusers(model::SharedMemoryModel) = size(model.U, 2)
 nitems(model::SharedMemoryModel) = size(model.P, 2)
 nfactors(model::SharedMemoryModel) = model.nfactors
 
@@ -61,7 +61,7 @@ function prep{TI<:Inputs}(inp::TI, nfacts::Int, lambda::Float64)
     nu = nusers(inp)
     ni = nitems(inp)
 
-    U = zeros(nu, nfacts)
+    U = zeros(nfacts, nu)
     P = rand(nfacts, ni)
     for idx in 1:ni
         P[1,idx] = mean(all_user_ratings(inp, idx))
