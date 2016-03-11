@@ -69,23 +69,20 @@ end
 read_input(fspec::DenseBlobs) = DenseMatBlobs(fspec.name; maxcache=fspec.maxcache)
 
 const MAX_BLK_BYTES = 128*1000*1000 #128MB
-function _max_items(T::Type, D::Int, sz::Tuple)
+function _max_items(T::Type, sz::Tuple)
     m,n = sz
-    unsplit_dim = (D == 1) ? n : m
-    ceil(Int, MAX_BLK_BYTES/sizeof(T)/unsplit_dim)
+    ceil(Int, MAX_BLK_BYTES/sizeof(T)/m)
 end
-function create{T}(fspec::DenseBlobs, ::Type{T}, D::Int, sz::Tuple, init::Function, max_items::Int=_max_items(T,D,sz))
+function create{T}(fspec::DenseBlobs, ::Type{T}, sz::Tuple, init::Function, max_items::Int=_max_items(T,sz))
     @logmsg("creating densematarray")
     isdir(fspec.name) || mkdir(fspec.dir)
     m,n = sz
-    unsplit_dim = (D == 1) ? n : m
-    split_dim = sz[D]
-    dm = DenseMatBlobs(T, D, unsplit_dim, fspec.name)
+    dm = DenseMatBlobs(T, fspec.name)
 
     startidx = 1
-    while startidx <= split_dim
-        idxrange = startidx:min(split_dim, startidx + max_items)
-        blobsz = (D == 1) ? (length(idxrange),unsplit_dim) : (unsplit_dim,length(idxrange))
+    while startidx <= n
+        idxrange = startidx:min(n, startidx + max_items)
+        blobsz = (m,length(idxrange))
         M = init(T, blobsz...)
         @logmsg("idxrange: $idxrange, sz: $(size(M))")
         append!(dm, M)

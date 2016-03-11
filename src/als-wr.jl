@@ -62,6 +62,7 @@ function update_item(r::UnitRange)
     for i in r
         update_item(i::Int64, c.model, c.inp, c.lambdaI)
     end
+    nothing
 end
 
 function update_item(i::Int64)
@@ -71,8 +72,8 @@ end
 
 function update_item(i::Int64, model, inp, lambdaI)
     nzrows, nzvals = users_and_ratings(inp, i)
-    Ui = getU(model, nzrows)
-    Uit = Ui'
+    Uit = getU(model, nzrows)
+    Ui = Uit'
     vec = Uit * nzvals
     mat = (Uit * Ui) + (length(nzrows) * lambdaI)
     setP(model, i, mat \ vec)
@@ -192,15 +193,15 @@ function fact_iters{TP<:ParShmem,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI,
     @logmsg("nusers: $nu, nitems: $ni")
     for iter in 1:niters
         @logmsg("begin iteration $iter")
-        pmap(update_user, 1:nu)
-        #@parallel (noop) for u in 1:nu
-        #    update_user(u)
-        #end
+        #pmap(update_user, 1:nu)
+        @parallel (noop) for u in 1:nu
+            update_user(u)
+        end
         @logmsg("\tusers")
-        pmap(update_item, 1:ni)
-        #@parallel (noop) for i in 1:ni
-        #    update_item(i)
-        #end
+        #pmap(update_item, 1:ni)
+        @parallel (noop) for i in 1:ni
+            update_item(i)
+        end
         @logmsg("\titems")
     end
 

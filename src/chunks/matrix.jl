@@ -11,46 +11,37 @@ const BYTES_128MB = 128 * 1024 * 1024
 
 def_sz{T}(::Type{T}, blk_sz::Int=BYTES_128MB) = floor(Int, blk_sz / sizeof(T))
 
-function relidx(range::Range, D::Int, i1::Int, i2::Int)
-    if D == 1
-        (i1 - first(range) + 1), i2
-    else
-        i1, (i2 - first(range) + 1)
-    end
-end
+relidx(range::UnitRange{Int}, i1::Int, i2::Int) = i1, (i2 - first(range) + 1)
 
 type SparseMatBlobs{Tv,Ti} <: AbstractMatrix{Tv}
     metadir::AbstractString
-    sz::Tuple
-    splits::Vector{Pair}
+    sz::Tuple{Int,Int}
+    splits::Vector{Pair{UnitRange{Int},Base.Random.UUID}}
     coll::BlobCollection{SparseMatrixCSC{Tv,Ti}}
 end
 
-# D = dimension that is split
-# N = value of the other dimension, which is constant across all splits
-type DenseMatBlobs{T,D,N} <: AbstractMatrix{T}
+type DenseMatBlobs{T} <: AbstractMatrix{T}
     metadir::AbstractString
-    sz::Tuple
-    splits::Vector{Pair}        # keep a mapping of index ranges to blobs
+    sz::Tuple{Int,Int}
+    splits::Vector{Pair{UnitRange{Int},Base.Random.UUID}}        # keep a mapping of index ranges to blobs
     coll::BlobCollection{Matrix{T}}
 end
 
 typealias MatBlobs Union{SparseMatBlobs,DenseMatBlobs}
 
 
-size(dm::MatBlobs) = dm.sz
+size{T<:MatBlobs}(dm::T) = dm.sz
 
-split_ranges(dm::MatBlobs) = [p.first for p in dm.splits]
+split_ranges{T<:MatBlobs}(dm::T) = [p.first for p in dm.splits]
 
-function splitidx(dm::MatBlobs, splitdim_idx::Int)
-    for splitnum in 1:length(dm.splits)
-        p = dm.splits[splitnum]
-        range = p.first
-        if splitdim_idx in range
+function splitidx{T<:MatBlobs}(dm::T, splitdim_idx::Int)
+    splits = UnitRange{Int}[x.first for x in dm.splits]
+    for splitnum in 1:length(splits)
+        if splitdim_idx in splits[splitnum]
             return splitnum
         end
     end
-    throw(BoundsError("MatBlobs $(dm.sz) split on dimension $D", splitdim_idx))
+    throw(BoundsError("MatBlobs $(dm.sz)", splitdim_idx))
 end
 
 function serialize(s::SerializationState, sm::MatBlobs)
@@ -141,12 +132,12 @@ end
 getindex{Tv}(sm::SparseMatBlobs{Tv}, i::Int) = getindex(sm, ind2sub(size(sm), i)...)
 function getindex{Tv}(sm::SparseMatBlobs{Tv}, i1::Int, i2::Int)
     part, range = load(sm, i2)
-    part[relidx(range, 2, i1, i2)...]
+    part[relidx(range, i1, i2)...]
 end
 
 function getindex{Tv}(sm::SparseMatBlobs{Tv}, ::Colon, i2::Int)
     part, range = load(sm, i2)
-    reli1, reli2 = relidx(range, 2, 1, i2)
+    reli1, reli2 = relidx(range, 1, i2)
     part[:,reli2]
 end
 
@@ -209,7 +200,7 @@ SparseMatBlobs(metadir::AbstractString; maxcache::Int=10) = matblob(metadir; max
 # DenseMatBlobs specific functions
 sersz{T}(d::Matrix{T}) = (sizeof(Int64)*2 + sizeof(d))
 
-function load{T,D,N}(dm::DenseMatBlobs{T,D,N}, splitdim_idx::Int)
+function load{T}(dm::DenseMatBlobs{T}, splitdim_idx::Int)
     splitnum = splitidx(dm, splitdim_idx)
     p = dm.splits[splitnum]
     range = p.first
@@ -217,76 +208,57 @@ function load{T,D,N}(dm::DenseMatBlobs{T,D,N}, splitdim_idx::Int)
     load(dm.coll, bid), range
 end
 
-getindex{T,D,N}(dm::DenseMatBlobs{T,D,N}, i::Int) = getindex(dm, ind2sub(size(dm), i)...)
+getindex{T}(dm::DenseMatBlobs{T}, i::Int) = getindex(dm, ind2sub(size(dm), i)...)
 
-function getindex{T,D,N}(dm::DenseMatBlobs{T,D,N}, i1::Int, i2::Int)
-    splitdim_idx = (D == 1) ? i1 : i2
-    part, range = load(dm, splitdim_idx)
-    part[relidx(range, D, i1, i2)...]
-end
-
-function getindex{T,N}(dm::DenseMatBlobs{T,1,N}, i1::Int, ::Colon)
-    part, range = load(dm, i1)
-    reli1, reli2 = relidx(range, 1, i1, 1)
-    part[reli1,:]
-end
-
-function getindex{T,N}(dm::DenseMatBlobs{T,1,N}, idxs, ::Colon)
-    res = Array(T, length(idxs), N)
-    for residx in 1:length(idxs)
-        idx = idxs[residx]
-        res[residx,:] = dm[idx,:]
-    end
-    res
-end
-
-function getindex{T,N}(dm::DenseMatBlobs{T,2,N}, ::Colon, i2::Int)
+function getindex{T}(dm::DenseMatBlobs{T}, i1::Int, i2::Int)
     part, range = load(dm, i2)
-    reli1, reli2 = relidx(range, 2, 1, i2)
-    part[:,reli2]
+    part[relidx(range, i1, i2)...]
 end
 
-function getindex{T,N}(dm::DenseMatBlobs{T,2,N}, ::Colon, idxs)
-    res = Array(T, N, length(idxs))
-    for residx in 1:length(idxs)
-        idx = idxs[residx]
-        res[:, residx] = dm[:, idx]
-    end
-    res
-end
-
-setindex!{T,D,N}(dm::DenseMatBlobs{T,D,N}, v::T, i::Int) = setindex!(dm, v, ind2sub(size(dm), i)...)
-
-function setindex!{T,D,N}(dm::DenseMatBlobs{T,D,N}, v::T, i1::Int, i2::Int)
-    splitdim_idx = (D == 1) ? i1 : i2
-    part, range = load(dm, splitdim_idx)
-    part[relidx(range, D, i1, i2)...] = v
-end
-
-function setindex!{T,N}(dm::DenseMatBlobs{T,1,N}, v, i1::Int, ::Colon)
-    part, range = load(dm, i1)
-    reli1, reli2 = relidx(range, 1, i1, 1)
-    part[reli1,:] = v
-end
-
-function setindex!{T,N}(dm::DenseMatBlobs{T,2,N}, v, ::Colon, i2::Int)
+function getindex{T}(dm::DenseMatBlobs{T}, ::Colon, i2::Int)
     part, range = load(dm, i2)
-    reli1, reli2 = relidx(range, 2, 1, i2)
-    part[:,reli2] = v
+    reli1, reli2 = relidx(range, 1, i2)
+    @inbounds v = part[:,reli2]
+    v
 end
-#=
-function *{T1,T2}(A::Vector{T1}, B::DenseMatBlobs{T2,1})
-    T = promote_type(T1, T2)
-    res = Array(T, size(B, 2))
-    for idx in 1:length(B.splits)
-        p = B.splits[idx]
-        part, r = load(B, first(p.first))
-        res[r] = v * part
+
+function getindex{T}(dm::DenseMatBlobs{T}, ::Colon, idxs::Vector{Int})
+    res = Array(T, dm.sz[1], length(idxs))
+    sp = sortperm(idxs)
+    sidxs = idxs[sp]
+    remain = length(idxs)
+    startpos = 1
+    endpos = 0
+    for spair in dm.splits
+        (remain > 0) || break
+        r,b = spair.first, spair.second
+        endpos = searchsortedlast(sidxs, last(r))
+        (endpos < startpos) && continue
+        A = load(dm.coll, b)
+        ir = startpos:endpos
+        fidxs = sidxs[ir]
+        @inbounds res[:, sp[ir]] = A[:, fidxs-start(r)+1]
+        remain -= length(ir)
+        startpos = endpos+1
     end
     res
 end
-=#
-function *{T1,T2}(A::Matrix{T1}, B::DenseMatBlobs{T2,2})
+
+setindex!{T}(dm::DenseMatBlobs{T}, v::T, i::Int) = setindex!(dm, v, ind2sub(size(dm), i)...)
+
+function setindex!{T}(dm::DenseMatBlobs{T}, v::T, i1::Int, i2::Int)
+    part, range = load(dm, i2)
+    part[relidx(range, i1, i2)...] = v
+end
+
+function setindex!{T}(dm::DenseMatBlobs{T}, v, ::Colon, i2::Int)
+    part, range = load(dm, i2)
+    reli1, reli2 = relidx(range, 1, i2)
+    @inbounds part[:,reli2] = v
+    v
+end
+
+function *{T1,T2}(A::Matrix{T1}, B::DenseMatBlobs{T2})
     m,n = size(B)
     (size(A, 2) == m) || throw(DimensionMismatch("A has dimensions $(size(A)) but B has dimensions $(size(B))"))
     res = Array(promote_type(T1,T2), 1, n)
@@ -298,7 +270,7 @@ function *{T1,T2}(A::Matrix{T1}, B::DenseMatBlobs{T2,2})
     res
 end
 
-function deserialize{T,D,N}(s::SerializationState, ::Type{DenseMatBlobs{T,D,N}})
+function deserialize{T}(s::SerializationState, ::Type{DenseMatBlobs{T}})
     metadir = deserialize(s)
     sz = deserialize(s)
     splits = deserialize(s)
@@ -311,30 +283,32 @@ function deserialize{T,D,N}(s::SerializationState, ::Type{DenseMatBlobs{T,D,N}})
 
     coll = BlobCollection(Matrix{T}, coll_mut, coll_reader; maxcache=coll_maxcache, id=coll_id)
     coll.blobs = coll_blobs
-    DenseMatBlobs{T,D,N}(metadir, sz, splits, coll)
+    DenseMatBlobs{T}(metadir, sz, splits, coll)
 end
 
-function DenseMatBlobs{Tv}(::Type{Tv}, D::Int, N::Int, metadir::AbstractString; maxcache::Int=10)
+function DenseMatBlobs{Tv}(::Type{Tv}, metadir::AbstractString; maxcache::Int=10)
     T = Matrix{Tv}
     io = FileBlobIO(Array{Tv}, true)
     mut = Mutable(BYTES_128MB, io)
     coll = BlobCollection(T, mut, io; maxcache=maxcache)
-    DenseMatBlobs{Tv,D,N}(metadir, (0,0), Pair[], coll)
+    DenseMatBlobs{Tv}(metadir, (0,0), Pair[], coll)
 end
 
-function append!{Tv,D,N}(dm::DenseMatBlobs{Tv,D,N}, M::Matrix{Tv})
+function append!{Tv}(dm::DenseMatBlobs{Tv}, M::Matrix{Tv})
     m,n = size(M)
-    unsplit_dim = (D == 1) ? n : m
-    split_dim = (D == 1) ? m : n
-    (N == unsplit_dim) || throw(BoundsError("DenseMatBlobs with unsplit dimension $D fixed at $N", (m,n)))
+    if dm.sz[1] > 0
+        (dm.sz[1] == m) || throw(BoundsError("DenseMatBlobs with size $(size(dm))", (m,n)))
+    else
+        dm.sz = (m,0)
+    end
     if isempty(dm.splits)
         dm.sz = (m, n)
-        idxrange = 1:split_dim
+        idxrange = 1:n
     else
-        old_split_dim = dm.sz[D]
-        new_split_dim = old_split_dim + split_dim
+        old_split_dim = dm.sz[2]
+        new_split_dim = old_split_dim + n
         idxrange = (old_split_dim+1):new_split_dim
-        dm.sz = (D == 1) ? (new_split_dim, unsplit_dim) : (unsplit_dim, new_split_dim)
+        dm.sz = (dm.sz[1], new_split_dim)
     end
 
     fname = joinpath(dm.metadir, string(length(dm.splits)+1))

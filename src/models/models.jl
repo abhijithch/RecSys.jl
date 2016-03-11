@@ -4,7 +4,7 @@ include("als_dist_model.jl")
 setU{M<:Model}(model::M, u::Int64, vals) = setU(model.U, u, vals)
 setU(NU::Nullable, u::Int64, vals) = setU(get(NU), u, vals)
 function setU{M<:ModelFactor}(U::M, u::Int64, vals)
-    U[u,:] = vals
+    U[:,u] = vals
     nothing
 end
 
@@ -17,7 +17,7 @@ end
 
 getU{M<:Model}(model::M, users) = getU(model.U, users)
 getU(NU::Nullable, users) = getU(get(NU), users)
-getU{M<:ModelFactor}(U::M, users) = U[users, :]
+getU{M<:ModelFactor}(U::M, users) = U[:, users]
 
 getP{M<:Model}(model::M, items) = getP(model.P, items)
 getP(NP::Nullable, items) = getP(get(NP), items)
