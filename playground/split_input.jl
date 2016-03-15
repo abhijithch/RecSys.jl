@@ -101,6 +101,10 @@ function split_lastfm(dataset_path = "/data/Work/datasets/last_fm_music_recommen
 
     amap = read_artist_map(DlmFile(joinpath(dataset_path, "artist_alias.txt")))
     T = read_trainingset(DlmFile(joinpath(dataset_path, "user_artist_data.txt")), amap)
+
+    println("randomizing items to remove skew")
+    T = T[:, randperm(size(T,2))]
+
     splitall(T, joinpath(dataset_path, "splits"), 20)
 end
 

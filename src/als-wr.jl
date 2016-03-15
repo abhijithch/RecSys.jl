@@ -184,8 +184,8 @@ function fact_iters{TP<:ParShmem,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI,
     share!(inp)
 
     c = ComputeData(model, inp, get(model.lambdaI))
-    for w in workers()
-        remotecall_fetch(share_compdata, w, c)
+    @sync for w in workers()
+        @async remotecall_fetch(share_compdata, w, c)
     end
 
     nu = nusers(inp)
@@ -240,6 +240,24 @@ function train(als::ALSWR{ParBlob,DistInputs,DistModel}, niters::Int, nfacts::In
     nothing
 end
 
+function update_user_blobs(r::UnitRange)
+    c = fetch_compdata()
+    U = get(c.model.U)
+    flush(U; callback=false)
+    update_user(r)
+    save(U)
+    nothing
+end
+
+function update_item_blobs(r::UnitRange)
+    c = fetch_compdata()
+    P = get(c.model.P)
+    flush(P; callback=false)
+    update_item(r)
+    save(P)
+    nothing
+end
+
 function fact_iters{TP<:ParBlob,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, niters::Int64)
     t1 = time()
 
@@ -254,8 +272,8 @@ function fact_iters{TP<:ParBlob,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, 
     # clear, share the data and load it again (not required, but more efficient)
     clear(model)
     W = workers()
-    for w in W
-        remotecall_fetch(share_compdata, w, c)
+    @sync for w in W
+        @async remotecall_fetch(share_compdata, w, c)
     end
     ensure_loaded(model)
     U = get(model.U)
@@ -266,13 +284,9 @@ function fact_iters{TP<:ParBlob,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, 
     @logmsg("nusers: $nu, nitems: $ni")
     for iter in 1:niters
         @logmsg("begin iteration $iter")
-        flush(U, W; callback=false)
-        pmap(update_user, uranges)
-        save(U, W)
+        pmap(update_user_blobs, uranges)
         @logmsg("\tusers")
-        flush(P, W; callback=false)
-        pmap(update_item, iranges)
-        save(P, W)
+        pmap(update_item_blobs, iranges)
         @logmsg("\titems")
     end
 
