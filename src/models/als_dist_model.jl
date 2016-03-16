@@ -42,7 +42,7 @@ end
 # TODO
 #function pinv(model::DistModel)
 #end
-#vec_mul_pinv(model::DistModel, v) = v * pinv(model)
+#mul_pinv(model::DistModel, v) = v * pinv(model)
 
 function prep{TI<:DistInputs}(inp::TI, nfacts::Int, lambda::Float64, model_dir::AbstractString, max_cache::Int=10)
     ensure_loaded(inp)

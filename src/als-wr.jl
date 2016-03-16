@@ -83,25 +83,34 @@ end
 
 ##
 # Validation
-function rmse(als::ALSWR)
-    ensure_loaded(als.inp)
-    rmse(als, als.inp)
+function rmse_block_sz(als::ALSWR)
+    model = get(als.model)
+    # heuristics to get a reasonable split size (applicable only to single node system)
+    block_sz = floor(Int, Base.Sys.free_memory() / 2 / nworkers() / nitems(model) / sizeof(Float64))
+    block_sz = min(5000, block_sz)
+    @logmsg("chosen block size: $block_sz. freemem: $(Base.Sys.free_memory()), nworkers: $(nworkers()), nitems: $(nitems(model))")
+    block_sz
 end
 
-function rmse(als::ALSWR, testdataset::FileSpec)
+function rmse(als::ALSWR; block_sz::Int=rmse_block_sz(als))
+    ensure_loaded(als.inp)
+    rmse(als, als.inp; block_sz=block_sz)
+end
+
+function rmse(als::ALSWR, testdataset::FileSpec; block_sz::Int=rmse_block_sz(als))
     ensure_loaded(als.inp)
     i_idmap = item_idmap(als.inp)
 
     testinp = SharedMemoryInputs(testdataset)
     ensure_loaded(testinp; only_items=i_idmap)
-    rmse(als, testinp)
+    rmse(als, testinp; block_sz=block_sz)
 end
 
 
 ##
 # Recommendation
 function _recommend(Uvec, model, rated, i_idmap; count::Int=10)
-    top = sortperm(vec(vec_mul_p(model, Uvec)))
+    top = sortperm(vec(mul_p(model, Uvec)))
 
     recommended = Int64[]
     idx = 1
@@ -152,7 +161,7 @@ function recommend(als::ALSWR, user_ratings::SparseVector{Float64,Int64}; unrate
     model = get(als.model)
     mapped_ratings = isempty(i_idmap) ? full(user_ratings) : user_ratings[i_idmap]
     Rvec = reshape(mapped_ratings, 1, length(mapped_ratings))
-    Uvec = vec_mul_pinv(model, Rvec)
+    Uvec = mul_pinv(model, Rvec)
 
     _recommend(Uvec, model, find(Rvec), i_idmap; count=count)
 end
@@ -212,7 +221,26 @@ function fact_iters{TP<:ParShmem,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI,
     nothing
 end
 
-function rmse{TP<:Union{ParShmem,ParBlob},TI<:Inputs}(als::ALSWR{TP}, inp::TI)
+function rmse(inp::Inputs, model::Model, r::UnitRange{Int})
+    Upart = getU(model, r) # nfactors x block_sz
+    # Upart' is block_sz x nfactors
+    # P is nfactors x nitems
+    # predicted is of size block_sz x nitems
+    predicted = mul_p(model, Upart')
+
+    cumerr = 0
+    nvals = 0
+    uoffset = first(r)-1
+
+    for user in r
+        nzrows, nzvals = items_and_ratings(inp, user)
+        nvals += length(nzrows)
+        cumerr += sum((vec(predicted[user-uoffset,nzrows]) .- nzvals) .^ 2)
+    end
+    [cumerr, nvals]
+end
+
+function rmse{T<:Union{ParShmem,ParBlob},TI<:Inputs}(als::ALSWR{T}, inp::TI; block_sz::Int=rmse_block_sz(als))
     t1 = time()
 
     model = get(als.model)
@@ -221,11 +249,12 @@ function rmse{TP<:Union{ParShmem,ParBlob},TI<:Inputs}(als::ALSWR{TP}, inp::TI)
     ensure_loaded(inp)
     ensure_loaded(model)
 
-    cumerr = @parallel (.+) for user in 1:nusers(inp)
-        Uvec = reshape(getU(model,user), 1, nfactors(model))
-        nzrows, nzvals = items_and_ratings(inp, user)
-        predicted = vec(vec_mul_p(model, Uvec))[nzrows]
-        [sum((predicted .- nzvals) .^ 2), length(predicted)]
+    nU = nusers(model)
+    usplits = [1:block_sz:nU...]
+    usplits[end] = nU
+    uranges = UnitRange{Int}[usplits[x-1]:usplits[x] for x in 2:length(usplits)]
+    cumerr = @parallel (.+) for r in uranges
+        rmse(inp, model, r)
     end
     localize!(model)
     @logmsg("rmse time $(time()-t1)")
@@ -297,7 +326,6 @@ function fact_iters{TP<:ParBlob,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, 
     nothing
 end
 
-
 ##
 # Thread parallelism
 if (Base.VERSION >= v"0.5.0-")
@@ -337,7 +365,7 @@ function fact_iters{TP<:ParThread,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI
     nothing
 end
 
-function rmse{TP<:ParThread,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
+function rmse{TP<:ParThread,TI<:Inputs}(als::ALSWR{TP}, inp::TI; block_sz::Int=0)
     t1 = time()
 
     model = get(als.model)
@@ -352,7 +380,7 @@ function rmse{TP<:ParThread,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
         @threads for user in pos:endpos
             Uvec = reshape(getU(model, user), 1, NF)
             nzrows, nzvals = items_and_ratings(inp, user)
-            predicted = vec(vec_mul_p(model, Uvec))[nzrows]
+            predicted = vec(mul_p(model, Uvec))[nzrows]
 
             tid = threadid()
             lengths[tid] += length(predicted)

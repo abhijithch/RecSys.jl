@@ -261,11 +261,12 @@ end
 function *{T1,T2}(A::Matrix{T1}, B::DenseMatBlobs{T2})
     m,n = size(B)
     (size(A, 2) == m) || throw(DimensionMismatch("A has dimensions $(size(A)) but B has dimensions $(size(B))"))
-    res = Array(promote_type(T1,T2), 1, n)
+    Rm = size(A,1)
+    res = Array(promote_type(T1,T2), Rm, n)
     for idx in 1:length(B.splits)
         p = B.splits[idx]
         part, r = load(B, first(p.first))
-        res[r] = A * part
+        Base.A_mul_B!(sub(res, 1:Rm, r), A, part)
     end
     res
 end

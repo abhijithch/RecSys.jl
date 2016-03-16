@@ -23,6 +23,6 @@ getP{M<:Model}(model::M, items) = getP(model.P, items)
 getP(NP::Nullable, items) = getP(get(NP), items)
 getP{M<:ModelFactor}(P::M, items) = P[:, items]
 
-vec_mul_p{M<:Model}(model::M, v) = vec_mul_p(model.P, v)
-vec_mul_p(NM::Nullable, v) = vec_mul_p(get(NM), v)
-vec_mul_p{M<:ModelFactor}(model::M, v) = v * model
+mul_p{M<:Model}(model::M, v) = mul_p(model.P, v)
+mul_p(NM::Nullable, v) = mul_p(get(NM), v)
+mul_p{M<:ModelFactor}(model::M, v) = v * model

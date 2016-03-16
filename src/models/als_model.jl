@@ -51,7 +51,7 @@ function pinv(model::SharedMemoryModel)
     end
     get(model.Pinv)
 end
-vec_mul_pinv(model::SharedMemoryModel, v) = v * pinv(model)
+mul_pinv(model::SharedMemoryModel, v) = v * pinv(model)
 
 function prep{TI<:Inputs}(inp::TI, nfacts::Int, lambda::Float64)
     ensure_loaded(inp)
