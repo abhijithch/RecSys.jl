@@ -1,28 +1,30 @@
 using RecSys
-using Blobs
-#include("/home/tan/Work/julia/packages/Blobs/examples/matrix.jl")
-using RecSys.MatrixBlobs
 
-function split_sparse(S, chunkmax, metadir)
-    isdir(metadir) || mkdir(metadir)
-    spblobs = SparseMatBlobs(Float64, Int64, metadir)
-    chunknum = 1
-    count = 1
-    colstart = 1
-    nzval = S.nzval
-    rowval = S.rowval
-    for col in 1:size(S,2)
-        npos = S.colptr[col+1]
-        if (npos >= (count + chunkmax)) || (col == size(S,2))
-            print("\tchunk $chunknum ... ")
-            append!(spblobs, S[:, colstart:col])
-            colstart = col+1
-            count = npos
-            chunknum += 1
-            println("done")
+function split_sparse(S, chunkmax, filepfx)
+    metafilename = "$(filepfx).meta"
+    open(metafilename, "w") do mfile
+        chunknum = 1
+        count = 1
+        colstart = 1
+        splits = UnitRange[]
+        nzval = S.nzval
+        rowval = S.rowval
+        for col in 1:size(S,2)
+            npos = S.colptr[col+1]
+            if (npos >= (count + chunkmax)) || (col == size(S,2))
+                print("\tchunk $chunknum ... ")
+                cfilename = "$(filepfx).$(chunknum)"
+                println(mfile, colstart, ",", col, ",", cfilename)
+                RecSys.mmap_csc_save(S[:, colstart:col], cfilename)
+                push!(splits, colstart:col)
+                colstart = col+1
+                count = npos
+                chunknum += 1
+                println("done")
+            end
         end
+        println("splits: $splits")
     end
-    Blobs.save(spblobs)
     nothing
 end
 
@@ -101,66 +103,74 @@ function split_lastfm(dataset_path = "/data/Work/datasets/last_fm_music_recommen
 
     amap = read_artist_map(DlmFile(joinpath(dataset_path, "artist_alias.txt")))
     T = read_trainingset(DlmFile(joinpath(dataset_path, "user_artist_data.txt")), amap)
-
-    println("randomizing items to remove skew")
-    T = T[:, randperm(size(T,2))]
-
     splitall(T, joinpath(dataset_path, "splits"), 20)
 end
 
 function load_splits(dataset_path = "/data/Work/datasets/last_fm_music_recommendation/profiledata_06-May-2005/splits")
-    sp = SparseMatBlobs(joinpath(dataset_path, "R_itemwise"))
-    for idx in 1:length(sp.splits)
-        p = sp.splits[idx]
-        r = p.first
-        part, _r = Blobs.load(sp, first(r))
-        RecSys.@logmsg("got part of size: $(size(part)), with r: $r, _r:$_r")
+    cf = RecSys.ChunkedFile(joinpath(dataset_path, "R_itemwise.meta"), UnitRange{Int64}, SparseMatrixCSC{Float64,Int}, 10)
+    println(cf)
+    nchunks = length(cf.chunks)
+    for idx in 1:10
+        cid = floor(Int, nchunks*rand()) + 1
+        println("fetching from chunk $cid")
+        c = cf.chunks[cid]
+        key = floor(Int, length(c.keyrange)*rand()) + c.keyrange.start
+        println("fetching key $key")
+        r,v = RecSys.data(cf, key)
+        #println("\tr:$r, v:$v")
     end
     println("finished")
+end
+
+function test_dense_splits(dataset_path = "/tmp/test")
+    metafilename = joinpath(dataset_path, "mem.meta")
+    cfile = DenseMatChunks(metafilename, 1, (10^6,10))
+    RecSys.create(cfile)
+    cf = RecSys.read_input(cfile)
+    for idx in 1:10
+        chunk = RecSys.getchunk(cf, idx*10^4)
+        A = RecSys.data(chunk, cf.lrucache)
+        @assert A.val[1] == 0.0
+        fill!(A.val, idx)
+    end
+    cf = RecSys.read_input(cfile)
+    for idx in 1:10
+        chunk = RecSys.getchunk(cf, idx*10^4)
+        A = RecSys.data(chunk, cf.lrucache)
+        @assert A.val[1] == Float64(idx)
+        println(A.val[1])
+    end
 end
 
 ##
 # an easy way to generate somewhat relevant test data is to take an existing dataset and replicate
 # items and users based on existing data.
-function Blobs.append!{Tv,Ti}(sp::SparseMatBlobs{Tv,Ti}, blob::Blob)
-    S = blob.data.value
-    m,n = size(S)
-    if isempty(sp.splits)
-        sp.sz = (m, n)
-        idxrange = 1:n
-    else
-        (sp.sz[1] == m) || throw(BoundsError("SparseMatBlobs $(sp.sz)", (m,n)))
-        old_n = sp.sz[2]
-        idxrange = (old_n+1):(old_n+n)
-        sp.sz = (m, old_n+n)
-    end
-
-    push!(sp.splits, idxrange => blob.id)
-    RecSys.@logmsg("appending blob $(blob.id) of size: $(size(S)) for idxrange: $idxrange, sersz: $(blob.metadata.size)")
-    blob
-end
-
 function generate_test_data(setname::AbstractString, generated_data_path, original_data_path, mul_factor)
-    sp1 = SparseMatBlobs(joinpath(original_data_path, setname))
-    metapath = joinpath(generated_data_path, setname)
-    sp2 = SparseMatBlobs(Float64, Int64, metapath)
-    isdir(metapath) || mkdir(metapath)
-    for idx in 1:length(sp1.splits)
-        p = sp1.splits[idx]
-        r = p.first
-        part, _r = Blobs.load(sp1, first(r))
-        RecSys.@logmsg("got part of size: $(size(part)), with r: $r, _r:$_r")
-        part_out = part
-        for x in 1:(mul_factor-1)
-            part_out = vcat(part_out, part)
-        end
-        blob = append!(sp2, part_out)
-        for x in 1:(mul_factor-1)
-            append!(sp2, blob)
-            RecSys.@logmsg("generated part of size: $(size(part_out))")
+    RecSys.@logmsg("generating $setname")
+    @assert mul_factor > 1
+    incf = RecSys.ChunkedFile(joinpath(original_data_path, "$(setname).meta"), UnitRange{Int64}, SparseMatrixCSC{Float64,Int}, 2)
+    outmetaname = joinpath(generated_data_path, "$(setname).meta")
+
+    outkeystart = 1
+    outfileidx = 1
+    open(outmetaname, "w") do outmeta
+        for chunk in incf.chunks
+            L = length(chunk.keyrange)
+            S = RecSys.data(chunk, incf.lrucache)
+            Sout = S
+            for x in 1:(mul_factor-1)
+                Sout = vcat(Sout, S)
+            end
+            outfname = joinpath(generated_data_path, "$(setname).$(outfileidx)")
+            outfileidx += 1
+            RecSys.mmap_csc_save(Sout, outfname)
+            for x in 1:mul_factor
+                println(outmeta, outkeystart, ",", outkeystart+L-1, ",", outfname)
+                RecSys.@logmsg("generated $setname $outkeystart:$(outkeystart+L-1) with size: $(size(Sout)) from size: $(size(S))")
+                outkeystart += L
+            end
         end
     end
-    Blobs.save(sp2)
 end
 
 function generate_test_data(generated_data_path = "/data/Work/datasets/last_fm_music_recommendation/profiledata_06-May-2005/splits2",

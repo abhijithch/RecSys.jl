@@ -4,8 +4,8 @@ type ALSWR{TP<:Parallelism,TI<:Inputs,TM<:Model}
     par::TP
 end
 
-ALSWR(inp::FileSpec, par::ParShmem) = ALSWR{ParShmem,SharedMemoryInputs,SharedMemoryModel}(SharedMemoryInputs(inp), nothing, par)
-ALSWR(user_item_ratings::FileSpec, item_user_ratings::FileSpec, par::ParBlob) = ALSWR{ParBlob,DistInputs,DistModel}(DistInputs(user_item_ratings, item_user_ratings), nothing, par)
+ALSWR{TP<:ParShmem}(inp::FileSpec, par::TP=ParShmem()) = ALSWR{TP,SharedMemoryInputs,SharedMemoryModel}(SharedMemoryInputs(inp), nothing, par)
+ALSWR(user_item_ratings::FileSpec, item_user_ratings::FileSpec, par::ParChunk) = ALSWR{ParChunk,DistInputs,DistModel}(DistInputs(user_item_ratings, item_user_ratings), nothing, par)
 
 function clear(als::ALSWR)
     clear(als.inp)
@@ -62,7 +62,6 @@ function update_item(r::UnitRange)
     for i in r
         update_item(i::Int64, c.model, c.inp, c.lambdaI)
     end
-    nothing
 end
 
 function update_item(i::Int64)
@@ -72,8 +71,8 @@ end
 
 function update_item(i::Int64, model, inp, lambdaI)
     nzrows, nzvals = users_and_ratings(inp, i)
-    Uit = getU(model, nzrows)
-    Ui = Uit'
+    Ui = getU(model, nzrows)
+    Uit = Ui'
     vec = Uit * nzvals
     mat = (Uit * Ui) + (length(nzrows) * lambdaI)
     setP(model, i, mat \ vec)
@@ -178,14 +177,25 @@ end
 fetch_compdata() = compdata[1]
 noop(args...) = nothing
 
+function sync_model()
+    c = fetch_compdata()
+    sync!(c.model)
+end
+
+function sync_worker_models()
+    for w in workers()
+        remotecall_fetch(sync_model, w)
+    end
+end
+
 function fact_iters{TP<:ParShmem,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, niters::Int64)
     t1 = time()
     share!(model)
     share!(inp)
 
     c = ComputeData(model, inp, get(model.lambdaI))
-    @sync for w in workers()
-        @async remotecall_fetch(share_compdata, w, c)
+    for w in workers()
+        remotecall_fetch(share_compdata, w, c)
     end
 
     nu = nusers(inp)
@@ -193,15 +203,15 @@ function fact_iters{TP<:ParShmem,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI,
     @logmsg("nusers: $nu, nitems: $ni")
     for iter in 1:niters
         @logmsg("begin iteration $iter")
-        #pmap(update_user, 1:nu)
-        @parallel (noop) for u in 1:nu
-            update_user(u)
-        end
+        pmap(update_user, 1:nu)
+        #@parallel (noop) for u in 1:nu
+        #    update_user(u)
+        #end
         @logmsg("\tusers")
-        #pmap(update_item, 1:ni)
-        @parallel (noop) for i in 1:ni
-            update_item(i)
-        end
+        pmap(update_item, 1:ni)
+        #@parallel (noop) for i in 1:ni
+        #    update_item(i)
+        #end
         @logmsg("\titems")
     end
 
@@ -212,7 +222,7 @@ function fact_iters{TP<:ParShmem,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI,
     nothing
 end
 
-function rmse{TP<:Union{ParShmem,ParBlob},TI<:Inputs}(als::ALSWR{TP}, inp::TI)
+function rmse{TP<:Union{ParShmem,ParChunk},TI<:Inputs}(als::ALSWR{TP}, inp::TI)
     t1 = time()
 
     model = get(als.model)
@@ -233,32 +243,14 @@ function rmse{TP<:Union{ParShmem,ParBlob},TI<:Inputs}(als::ALSWR{TP}, inp::TI)
 end
 
 ##
-# Blob based distributed memory parallelism
-function train(als::ALSWR{ParBlob,DistInputs,DistModel}, niters::Int, nfacts::Int64, model_dir::AbstractString, max_cache::Int=10, lambda::Float64=0.065)
+# Chunk based distributed memory parallelism
+function train(als::ALSWR{ParChunk,DistInputs,DistModel}, niters::Int, nfacts::Int64, model_dir::AbstractString, max_cache::Int=10, lambda::Float64=0.065)
     als.model = prep(als.inp, nfacts, lambda, model_dir, max_cache)
     fact_iters(als, niters)
     nothing
 end
 
-function update_user_blobs(r::UnitRange)
-    c = fetch_compdata()
-    U = get(c.model.U)
-    flush(U; callback=false)
-    update_user(r)
-    save(U)
-    nothing
-end
-
-function update_item_blobs(r::UnitRange)
-    c = fetch_compdata()
-    P = get(c.model.P)
-    flush(P; callback=false)
-    update_item(r)
-    save(P)
-    nothing
-end
-
-function fact_iters{TP<:ParBlob,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, niters::Int64)
+function fact_iters{TP<:ParChunk,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, niters::Int64)
     t1 = time()
 
     clear(inp)
@@ -266,27 +258,24 @@ function fact_iters{TP<:ParBlob,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI, 
     share!(inp)
 
     c = ComputeData(model, inp, get(model.lambdaI))
-    uranges = UnitRange[p.first for p in get(model.U).splits]
-    iranges = UnitRange[p.first for p in get(model.P).splits]
-
-    # clear, share the data and load it again (not required, but more efficient)
+    uranges = UnitRange[chunk.keyrange for chunk in get(model.U).chunks]
+    iranges = UnitRange[chunk.keyrange for chunk in get(model.P).chunks]
     clear(model)
-    W = workers()
-    @sync for w in W
-        @async remotecall_fetch(share_compdata, w, c)
+
+    for w in workers()
+        remotecall_fetch(share_compdata, w, c)
     end
-    ensure_loaded(model)
-    U = get(model.U)
-    P = get(model.P)
 
     nu = nusers(inp)
     ni = nitems(inp)
     @logmsg("nusers: $nu, nitems: $ni")
     for iter in 1:niters
         @logmsg("begin iteration $iter")
-        pmap(update_user_blobs, uranges)
+        pmap(update_user, uranges)
+        sync_worker_models()
         @logmsg("\tusers")
-        pmap(update_item_blobs, iranges)
+        pmap(update_item, iranges)
+        sync_worker_models()
         @logmsg("\titems")
     end
 
@@ -302,7 +291,7 @@ end
 # Thread parallelism
 if (Base.VERSION >= v"0.5.0-")
 
-ALSWR(inp::FileSpec, par::ParThread) = ALSWR{ParThread,SharedMemoryInputs,SharedMemoryModel}(SharedMemoryInputs(inp), nothing, par)
+ALSWR{TP<:ParThread}(inp::FileSpec, par::TP=ParShmem()) = ALSWR{TP,SharedMemoryInputs,SharedMemoryModel}(SharedMemoryInputs(inp), nothing, par)
 
 function thread_update_item{TM<:Model,TI<:Inputs}(model::TM, inp::TI, ni::Int64, lambdaI::Matrix{Float64})
     @threads for i in Int64(1):ni
@@ -326,9 +315,17 @@ function fact_iters{TP<:ParThread,TM<:Model,TI<:Inputs}(::TP, model::TM, inp::TI
     for iter in 1:niters
         @logmsg("begin iteration $iter")
         # gc is not threadsafe yet. issue #10317
+        gc_enable(false)
         thread_update_user(model, inp, nu, lambdaI)
+        sync!(model)
+        gc_enable(true)
+        gc()
+        gc_enable(false)
         @logmsg("\tusers")
         thread_update_item(model, inp, ni, lambdaI)
+        sync!(model)
+        gc_enable(true)
+        gc()
         @logmsg("\titems")
     end
 
@@ -349,6 +346,7 @@ function rmse{TP<:ParThread,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
     N2 = nusers(als.inp)
     while pos < N2
         endpos = min(pos+10000, N2)
+        gc_enable(false)
         @threads for user in pos:endpos
             Uvec = reshape(getU(model, user), 1, NF)
             nzrows, nzvals = items_and_ratings(inp, user)
@@ -358,6 +356,8 @@ function rmse{TP<:ParThread,TI<:Inputs}(als::ALSWR{TP}, inp::TI)
             lengths[tid] += length(predicted)
             errs[tid] += sum((predicted - nzvals) .^ 2)
         end
+        gc_enable(true)
+        gc()
         pos = endpos + 1
     end
     @logmsg("rmse time $(time()-t1)")
