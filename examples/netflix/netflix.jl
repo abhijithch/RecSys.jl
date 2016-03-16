@@ -2,7 +2,7 @@ using RecSys
 
 function test(matfile, entryname)
     ratings = MatFile(matfile, entryname)
-    rec = ALSWR(ratings)
+    rec = ALSWR(ratings, ParShmem())
     train(rec, 10, 4)
     err = rmse(rec)
     println("rmse of the model: $err")

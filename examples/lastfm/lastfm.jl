@@ -15,10 +15,10 @@ type MusicRec
 
     function MusicRec(trainingset::FileSpec, artist_names::FileSpec, artist_map::FileSpec)
         T, N = map_artists(trainingset, artist_names, artist_map)
-        new(trainingset, artist_names, artist_map, ALSWR(SparseMat(T)), Nullable(N))
+        new(trainingset, artist_names, artist_map, ALSWR(SparseMat(T), ParShmem()), Nullable(N))
     end
     function MusicRec(user_item_ratings::FileSpec, item_user_ratings::FileSpec, artist_names::FileSpec, artist_map::FileSpec)
-        new(user_item_ratings, artist_names, artist_map, ALSWR(user_item_ratings, item_user_ratings, ParChunk()), nothing)
+        new(user_item_ratings, artist_names, artist_map, ALSWR(user_item_ratings, item_user_ratings, ParBlob()), nothing)
     end
 end
 
@@ -156,8 +156,8 @@ function test(dataset_path)
 end
 
 function test_chunks(dataset_path, splits_dir, model_path)
-    user_item_ratings = SparseMatChunks(joinpath(dataset_path, splits_dir, "R_itemwise.meta"), 10)
-    item_user_ratings = SparseMatChunks(joinpath(dataset_path, splits_dir, "RT_userwise.meta"), 10)
+    user_item_ratings = SparseBlobs(joinpath(dataset_path, splits_dir, "R_itemwise"); maxcache=10)
+    item_user_ratings = SparseBlobs(joinpath(dataset_path, splits_dir, "RT_userwise"); maxcache=10)
     artist_names = DlmFile(joinpath(dataset_path, "artist_data.txt"); dlm='\t', quotes=false)
     artist_map = DlmFile(joinpath(dataset_path, "artist_alias.txt"))
 
