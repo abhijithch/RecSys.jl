@@ -134,6 +134,7 @@ function test(dataset_path)
 
     err = rmse(rec)
     println("rmse of the model: $err")
+
     println("recommending existing user:")
     print_recommendations(rec, recommend(rec, 9875)...)
 
@@ -152,21 +153,25 @@ function test(dataset_path)
     clear(rec.als)
     localize!(rec.als)
     save(rec, "model.sav")
+
     nothing
 end
 
 function test_chunks(dataset_path, splits_dir, model_path)
-    user_item_ratings = SparseBlobs(joinpath(dataset_path, splits_dir, "R_itemwise"); maxcache=10)
-    item_user_ratings = SparseBlobs(joinpath(dataset_path, splits_dir, "RT_userwise"); maxcache=10)
+    mem = Base.Sys.free_memory()
+    mem_model = mem_inputs = round(Int, mem/3)
+    user_item_ratings = SparseBlobs(joinpath(dataset_path, splits_dir, "R_itemwise"); maxcache=mem_inputs)
+    item_user_ratings = SparseBlobs(joinpath(dataset_path, splits_dir, "RT_userwise"); maxcache=mem_inputs)
     artist_names = DlmFile(joinpath(dataset_path, "artist_data.txt"); dlm='\t', quotes=false)
     artist_map = DlmFile(joinpath(dataset_path, "artist_alias.txt"))
 
     rec = MusicRec(user_item_ratings, item_user_ratings, artist_names, artist_map)
-    train(rec, 20, 20, model_path, 10)
+    train(rec, 20, 20, model_path, mem_model)
 
     err = rmse(rec)
     println("rmse of the model: $err")
     println("recommending existing user:")
     print_recommendations(recommend(rec, 9875)...)
+
     nothing
 end

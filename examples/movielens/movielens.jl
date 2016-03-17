@@ -91,11 +91,13 @@ end
 
 # prepare chunks for movielens dataset by running `split_movielens` from `playground/split_input.jl`
 function test_chunks(dataset_path, model_path)
-    user_item_ratings = SparseBlobs(joinpath(dataset_path, "splits", "R_itemwise"); maxcache=10)
-    item_user_ratings = SparseBlobs(joinpath(dataset_path, "splits", "RT_userwise"); maxcache=10)
+    mem = Base.Sys.free_memory()
+    mem_model = mem_inputs = round(Int, mem/3)
+    user_item_ratings = SparseBlobs(joinpath(dataset_path, "splits", "R_itemwise"); maxcache=mem_model)
+    item_user_ratings = SparseBlobs(joinpath(dataset_path, "splits", "RT_userwise"); maxcache=mem_model)
     movies_file = DlmFile(joinpath(dataset_path, "movies.csv"); dlm=',', header=true)
     rec = MovieRec(user_item_ratings, item_user_ratings, movies_file)
-    train(rec, 10, 4, model_path, 10)
+    train(rec, 10, 4, model_path, mem_inputs)
 
     err = rmse(rec)
     println("rmse of the model: $err")

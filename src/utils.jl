@@ -1,3 +1,7 @@
+
+# consume upto 50% of available memory, across all workers, and across inputs, U and P matrices
+def_cache() = max(MAX_BLK_BYTES, floor(Int, Base.Sys.free_memory()/3/2/nworkers()))
+ 
 zero{T<:AbstractString}(::Type{T}) = convert(T, "")
 
 # TODO: optimize save/load instead of a blind serialize call
@@ -52,7 +56,7 @@ read_input(fspec::SparseMat) = fspec.S
 type SparseBlobs <: FileSpec
     name::AbstractString
     maxcache::Int
-    function SparseBlobs(name::AbstractString; maxcache::Int=10)
+    function SparseBlobs(name::AbstractString; maxcache::Int=def_cache())
         new(name, maxcache)
     end
 end
@@ -62,7 +66,7 @@ read_input(fspec::SparseBlobs) = SparseMatBlobs(fspec.name; maxcache=fspec.maxca
 type DenseBlobs <: FileSpec
     name::AbstractString
     maxcache::Int
-    function DenseBlobs(name::AbstractString; maxcache::Int=10)
+    function DenseBlobs(name::AbstractString; maxcache::Int=def_cache())
         new(name, maxcache)
     end
 end
@@ -77,7 +81,7 @@ function create{T}(fspec::DenseBlobs, ::Type{T}, sz::Tuple, init::Function, max_
     @logmsg("creating densematarray")
     isdir(fspec.name) || mkdir(fspec.dir)
     m,n = sz
-    dm = DenseMatBlobs(T, fspec.name)
+    dm = DenseMatBlobs(T, fspec.name; maxcache=fspec.maxcache)
 
     startidx = 1
     while startidx <= n

@@ -44,7 +44,7 @@ end
 #end
 #mul_pinv(model::DistModel, v) = v * pinv(model)
 
-function prep{TI<:DistInputs}(inp::TI, nfacts::Int, lambda::Float64, model_dir::AbstractString, max_cache::Int=10)
+function prep{TI<:DistInputs}(inp::TI, nfacts::Int, lambda::Float64, model_dir::AbstractString, maxcache::Int=def_cache())
     ensure_loaded(inp)
     t1 = time()
     @logmsg("preparing inputs...")
@@ -52,8 +52,8 @@ function prep{TI<:DistInputs}(inp::TI, nfacts::Int, lambda::Float64, model_dir::
     nu = nusers(inp)
     ni = nitems(inp)
 
-    Udir = DenseBlobs(joinpath(model_dir, "U"))
-    Pdir = DenseBlobs(joinpath(model_dir, "P"))
+    Udir = DenseBlobs(joinpath(model_dir, "U"); maxcache=maxcache)
+    Pdir = DenseBlobs(joinpath(model_dir, "P"); maxcache=maxcache)
     isdir(model_dir) || mkdir(model_dir)
     isdir(Udir.name) || mkdir(Udir.name)
     isdir(Pdir.name) || mkdir(Pdir.name)

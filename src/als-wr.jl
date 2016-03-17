@@ -263,8 +263,8 @@ end
 
 ##
 # Blob based distributed memory parallelism
-function train(als::ALSWR{ParBlob,DistInputs,DistModel}, niters::Int, nfacts::Int64, model_dir::AbstractString, max_cache::Int=10, lambda::Float64=0.065)
-    als.model = prep(als.inp, nfacts, lambda, model_dir, max_cache)
+function train(als::ALSWR{ParBlob,DistInputs,DistModel}, niters::Int, nfacts::Int64, model_dir::AbstractString, maxcache::Int=def_cache(), lambda::Float64=0.065)
+    als.model = prep(als.inp, nfacts, lambda, model_dir, maxcache)
     fact_iters(als, niters)
     nothing
 end

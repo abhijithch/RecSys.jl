@@ -9,6 +9,8 @@ export DenseMatBlobs, SparseMatBlobs, size, getindex, setindex!, serialize, dese
 
 const BYTES_128MB = 128 * 1024 * 1024
 
+def_cache() = max(BYTES_128MB, floor(Int, Base.Sys.free_memory()/2/nworkers()))
+
 def_sz{T}(::Type{T}, blk_sz::Int=BYTES_128MB) = floor(Int, blk_sz / sizeof(T))
 
 relidx(range::UnitRange{Int}, i1::Int, i2::Int) = i1, (i2 - first(range) + 1)
@@ -58,7 +60,7 @@ function serialize(s::SerializationState, sm::MatBlobs)
     serialize(s, coll.maxcache)
 end
 
-function matblob(metadir::AbstractString; maxcache::Int=10)
+function matblob(metadir::AbstractString; maxcache::Int=def_cache())
     @logmsg("reading back matrix from $metadir")
     open(joinpath(metadir, "meta"), "r") do io
         mat = deserialize(SerializationState(io))
@@ -152,15 +154,15 @@ function deserialize{Tv,Ti}(s::SerializationState, ::Type{SparseMatBlobs{Tv,Ti}}
     coll_blobs = deserialize(s)
     coll_maxcache = deserialize(s)
 
-    coll = BlobCollection(SparseMatrixCSC{Tv,Ti}, coll_mut, coll_reader; maxcache=coll_maxcache, id=coll_id)
+    coll = BlobCollection(SparseMatrixCSC{Tv,Ti}, coll_mut, coll_reader; maxcache=coll_maxcache, strategy=maxmem, id=coll_id)
     coll.blobs = coll_blobs
     SparseMatBlobs{Tv,Ti}(metadir, sz, splits, coll)
 end
 
-function SparseMatBlobs{Tv,Ti}(::Type{Tv}, ::Type{Ti}, metadir::AbstractString; maxcache::Int=10)
+function SparseMatBlobs{Tv,Ti}(::Type{Tv}, ::Type{Ti}, metadir::AbstractString; maxcache::Int=def_cache())
     T = SparseMatrixCSC{Tv,Ti}
     mut = Mutable(BYTES_128MB, FileBlobIO(T, true))
-    coll = BlobCollection(T, mut, FileBlobIO(T, true); maxcache=maxcache)
+    coll = BlobCollection(T, mut, FileBlobIO(T, true); maxcache=maxcache, strategy=maxmem)
     SparseMatBlobs{Tv,Ti}(metadir, (0,0), Pair[], coll)
 end
 
@@ -194,7 +196,7 @@ function save(sp::SparseMatBlobs, wrkrs::Vector{Int}=Int[])
     nothing
 end
 
-SparseMatBlobs(metadir::AbstractString; maxcache::Int=10) = matblob(metadir; maxcache=maxcache)
+SparseMatBlobs(metadir::AbstractString; maxcache::Int=def_cache()) = matblob(metadir; maxcache=maxcache)
 
 ##
 # DenseMatBlobs specific functions
@@ -282,16 +284,16 @@ function deserialize{T}(s::SerializationState, ::Type{DenseMatBlobs{T}})
     coll_blobs = deserialize(s)
     coll_maxcache = deserialize(s)
 
-    coll = BlobCollection(Matrix{T}, coll_mut, coll_reader; maxcache=coll_maxcache, id=coll_id)
+    coll = BlobCollection(Matrix{T}, coll_mut, coll_reader; maxcache=coll_maxcache, strategy=maxmem, id=coll_id)
     coll.blobs = coll_blobs
     DenseMatBlobs{T}(metadir, sz, splits, coll)
 end
 
-function DenseMatBlobs{Tv}(::Type{Tv}, metadir::AbstractString; maxcache::Int=10)
+function DenseMatBlobs{Tv}(::Type{Tv}, metadir::AbstractString; maxcache::Int=def_cache())
     T = Matrix{Tv}
     io = FileBlobIO(Array{Tv}, true)
     mut = Mutable(BYTES_128MB, io)
-    coll = BlobCollection(T, mut, io; maxcache=maxcache)
+    coll = BlobCollection(T, mut, io; maxcache=maxcache, strategy=maxmem)
     DenseMatBlobs{Tv}(metadir, (0,0), Pair[], coll)
 end
 
@@ -321,7 +323,7 @@ function append!{Tv}(dm::DenseMatBlobs{Tv}, M::Matrix{Tv})
     blob
 end
 
-DenseMatBlobs(metadir::AbstractString; maxcache::Int=10) = matblob(metadir; maxcache=maxcache)
+DenseMatBlobs(metadir::AbstractString; maxcache::Int=def_cache()) = matblob(metadir; maxcache=maxcache)
 
 function save(dm::DenseMatBlobs, wrkrs::Vector{Int}=Int[])
     isempty(wrkrs) ? save(dm.coll) : save(dm.coll, wrkrs)
