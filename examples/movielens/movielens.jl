@@ -12,10 +12,10 @@ type MovieRec
     movie_mat::Nullable{SparseVector{AbstractString,Int64}}
 
     function MovieRec(trainingset::FileSpec, movie_names::FileSpec)
-        new(movie_names, ALSWR(trainingset), nothing)
+        new(movie_names, ALSWR(trainingset, ParShmem()), nothing)
     end
     function MovieRec(user_item_ratings::FileSpec, item_user_ratings::FileSpec, movie_names::FileSpec)
-        new(movie_names, ALSWR(user_item_ratings, item_user_ratings, ParChunk()), nothing)
+        new(movie_names, ALSWR(user_item_ratings, item_user_ratings, ParBlob()), nothing)
     end
 end
 
@@ -91,11 +91,13 @@ end
 
 # prepare chunks for movielens dataset by running `split_movielens` from `playground/split_input.jl`
 function test_chunks(dataset_path, model_path)
-    user_item_ratings = SparseMatChunks(joinpath(dataset_path, "splits", "R_itemwise.meta"), 5)
-    item_user_ratings = SparseMatChunks(joinpath(dataset_path, "splits", "RT_userwise.meta"), 5)
+    mem = Base.Sys.free_memory()
+    mem_model = mem_inputs = round(Int, mem/3)
+    user_item_ratings = SparseBlobs(joinpath(dataset_path, "splits", "R_itemwise"); maxcache=mem_model)
+    item_user_ratings = SparseBlobs(joinpath(dataset_path, "splits", "RT_userwise"); maxcache=mem_model)
     movies_file = DlmFile(joinpath(dataset_path, "movies.csv"); dlm=',', header=true)
     rec = MovieRec(user_item_ratings, item_user_ratings, movies_file)
-    train(rec, 10, 4, model_path, 10)
+    train(rec, 10, 4, model_path, mem_inputs)
 
     err = rmse(rec)
     println("rmse of the model: $err")

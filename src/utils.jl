@@ -1,3 +1,7 @@
+
+# consume upto 50% of available memory, across all workers, and across inputs, U and P matrices
+def_cache() = max(MAX_BLK_BYTES, floor(Int, Base.Sys.free_memory()/3/2/nworkers()))
+ 
 zero{T<:AbstractString}(::Type{T}) = convert(T, "")
 
 # TODO: optimize save/load instead of a blind serialize call
@@ -48,73 +52,45 @@ type SparseMat <: FileSpec
 end
 read_input(fspec::SparseMat) = fspec.S
 
-# sparse matrix chunks (input only)
-type SparseMatChunks <: FileSpec
-    metafile::AbstractString
-    max_cache::Int
-
-    function SparseMatChunks(metafile::AbstractString, max_cache::Int=5)
-        new(metafile, max_cache)
+# sparse matrix blobs (input only)
+type SparseBlobs <: FileSpec
+    name::AbstractString
+    maxcache::Int
+    function SparseBlobs(name::AbstractString; maxcache::Int=def_cache())
+        new(name, maxcache)
     end
 end
-read_input(fspec::SparseMatChunks) = ChunkedFile(fspec.metafile, UnitRange{Int64}, SparseMatrixCSC{Float64,Int}, fspec.max_cache)
+read_input(fspec::SparseBlobs) = SparseMatBlobs(fspec.name; maxcache=fspec.maxcache)
 
-# dense matrix chunks (input and output)
-type DenseMatChunks <: FileSpec
-    metafile::AbstractString
-    D::Int
-    sz::Tuple
-    max_cache::Int
-
-    function DenseMatChunks(metafile::AbstractString, splitdim::Int, sz::Tuple, max_cache::Int=5)
-        new(metafile, splitdim, sz, max_cache)
+# dense matrix blobs (input and output)
+type DenseBlobs <: FileSpec
+    name::AbstractString
+    maxcache::Int
+    function DenseBlobs(name::AbstractString; maxcache::Int=def_cache())
+        new(name, maxcache)
     end
 end
-function read_input(fspec::DenseMatChunks)
-    D = fspec.D
-    N = fspec.sz[(D==1) ? 2 : 1]
-    ChunkedFile(fspec.metafile, UnitRange{Int64}, MemMappedMatrix{Float64,D,N}, fspec.max_cache, false)
-end
-
-zero!(a) = fill!(a, 0)
+read_input(fspec::DenseBlobs) = DenseMatBlobs(fspec.name; maxcache=fspec.maxcache)
 
 const MAX_BLK_BYTES = 128*1000*1000 #128MB
-function _max_items(fspec::DenseMatChunks)
-    D = fspec.D
-    N = fspec.sz[(D==1) ? 2 : 1]
-    ceil(Int, MAX_BLK_BYTES/sizeof(Float64)/N)
+function _max_items(T::Type, sz::Tuple)
+    m,n = sz
+    ceil(Int, MAX_BLK_BYTES/sizeof(T)/m)
 end
+function create{T}(fspec::DenseBlobs, ::Type{T}, sz::Tuple, init::Function, max_items::Int=_max_items(T,sz))
+    @logmsg("creating densematarray")
+    isdir(fspec.name) || mkdir(fspec.dir)
+    m,n = sz
+    dm = DenseMatBlobs(T, fspec.name; maxcache=fspec.maxcache)
 
-function create(fspec::DenseMatChunks, initfn::Function=zero!, max_items::Int=_max_items(fspec))
-    touch(fspec.metafile)
-    cf = read_input(fspec)
-
-    D = fspec.D
-    N = fspec.sz[(D==1) ? 2 : 1]
-    V = fspec.sz[D]
-    NC = ceil(Int, V/max_items)
-    chunkpfx = splitext(fspec.metafile)[1]
-    empty!(cf.chunks)
-    empty!(cf.lrucache)
-
-    for idx in 1:NC
-        chunkfname = "$(chunkpfx).$(idx)"
-        isfile(chunkfname) && rm(chunkfname)
-        r1 = (idx-1)*max_items + 1
-        r2 = min(idx*max_items, V)
-        M = r2-r1+1
-        sz = M*N*sizeof(Float64)
-        @logmsg("creating chunk $chunkfname sz: $sz, r: $r1:$r2, N:$N")
-        chunk = Chunk(chunkfname, 0, sz, r1:r2, MemMappedMatrix{Float64,D,N})
-        push!(cf.chunks, chunk)
+    startidx = 1
+    while startidx <= n
+        idxrange = startidx:min(n, startidx + max_items)
+        blobsz = (m,length(idxrange))
+        M = init(T, blobsz...)
+        @logmsg("idxrange: $idxrange, sz: $(size(M))")
+        append!(dm, M)
+        startidx = last(idxrange) + 1
     end
-    for idx in 1:NC
-        r1 = (idx-1)*max_items + 1
-        chunk = getchunk(cf, r1)
-        A = data(chunk, cf.lrucache)
-        initfn(A.val)
-        sync!(chunk)
-    end
-    writemeta(cf)
-    nothing
+    dm
 end
