@@ -13,18 +13,24 @@ all_item_ratings{T<:Inputs}(inp::T, u::Int64) = _spvals(get(inp.RT), u)
 all_items_rated{T<:Inputs}(inp::T, u::Int64) = _sprows(get(inp.RT), u)
 
 function _sprowsvals{R<:InputRatings}(sp::R, col::Int64)
-    v = sp[:,col]
-    Base.SparseArrays.nonzeroinds(v), Base.SparseArrays.nonzeros(v)
+    s = sp[:,col]
+    v = SparseVector(length(s.nzval), int(s.nzval), s.rowval)
+    #Base.SparseArrays.nonzeroinds(v), Base.SparseArrays.nonzeros(v)
+    nonzeroinds(v), nonzeros(v)
 end
 
 function _sprows{R<:InputRatings}(sp::R, col::Int64)
-    v = sp[:,col]
-    Base.SparseArrays.nonzeroinds(v)
+    s = sp[:,col]
+    v = SparseVector(length(s.nzval), int(s.nzval), s.rowval)
+    #Base.SparseArrays.nonzeroinds(v)
+    nonzeroinds(v)
 end
 
 function _spvals{R<:InputRatings}(sp::R, col::Int64)
-    v = sp[:,col]
-    Base.SparseArrays.nonzeros(sp[:,col])
+    s = sp[:,col]
+    v = SparseVector(length(s.nzval), int(s.nzval), s.rowval)
+    #Base.SparseArrays.nonzeros(sp[:,col])
+    nonzeros(sp[:,col])
 end
 
 function _sprowsvals(sp::ParallelSparseMatMul.SharedSparseMatrixCSC{Float64,Int64}, col::Int64)
