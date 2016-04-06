@@ -9,6 +9,9 @@ using .MatrixBlobs
 
 if isless(Base.VERSION, v"0.5.0-")
     using SparseVectors
+else
+    nonzeroinds = Base.SparseArrays.nonzeroinds
+    nonzeros = Base.SparseArrays.nonzeros
 end
 
 import Base: zero
