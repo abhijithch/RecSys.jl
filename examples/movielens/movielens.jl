@@ -14,6 +14,11 @@ type MovieRec
     function MovieRec(trainingset::FileSpec, movie_names::FileSpec)
         new(movie_names, ALSWR(trainingset, ParShmem()), nothing)
     end
+
+    function MovieRec(trainingset::FileSpec, movie_names::FileSpec, thread::Bool) 
+	new(movie_names, ALSWR(trainingset, ParThread()), nothing)
+    end     
+
     function MovieRec(user_item_ratings::FileSpec, item_user_ratings::FileSpec, movie_names::FileSpec)
         new(movie_names, ALSWR(user_item_ratings, item_user_ratings, ParBlob()), nothing)
     end
@@ -59,11 +64,19 @@ function print_recommendations(rec::MovieRec, recommended::Vector{Int}, watched:
     nothing
 end
 
+function test_thread(dataset_path)
+    ratings_file = DlmFile(joinpath(dataset_path, "ratings.csv"); dlm=',', header=true)
+    movies_file = DlmFile(joinpath(dataset_path, "movies.csv"); dlm=',', header=true)
+    rec = MovieRec(ratings_file, movies_file, true)
+
+    @time train(rec, 10, 10)
+end
+
 function test(dataset_path)
     ratings_file = DlmFile(joinpath(dataset_path, "ratings.csv"); dlm=',', header=true)
     movies_file = DlmFile(joinpath(dataset_path, "movies.csv"); dlm=',', header=true)
     rec = MovieRec(ratings_file, movies_file)
-    train(rec, 10, 4)
+    @time train(rec, 10, 10)
 
     err = rmse(rec)
     println("rmse of the model: $err")
@@ -97,7 +110,7 @@ function test_chunks(dataset_path, model_path)
     item_user_ratings = SparseBlobs(joinpath(dataset_path, "splits", "RT_userwise"); maxcache=mem_model)
     movies_file = DlmFile(joinpath(dataset_path, "movies.csv"); dlm=',', header=true)
     rec = MovieRec(user_item_ratings, item_user_ratings, movies_file)
-    train(rec, 10, 4, model_path, mem_inputs)
+    @time train(rec, 10, 10, model_path, mem_inputs)
 
     err = rmse(rec)
     println("rmse of the model: $err")
