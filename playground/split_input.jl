@@ -1,5 +1,6 @@
 using RecSys
 using Blobs
+using MAT
 #include("/home/tan/Work/julia/packages/Blobs/examples/matrix.jl")
 using RecSys.MatrixBlobs
 
@@ -54,6 +55,15 @@ function splitall(R::SparseMatrixCSC, output_path::AbstractString, nsplits::Int)
     println("splitting RT userwise at $nsplits_u users...")
     split_sparse(RT, nsplits_u, joinpath(output_path, "RT_userwise"))
     nothing
+end
+
+function split_netflix(dataset_path = "/data/Work/datasets/netflix-full")
+    println("reading dataset")
+    f = matopen(joinpath(dataset_path, "netflixAll.mat"))
+    a = read(f, "R_with_probe")
+    println("randomizing items to remove skew")
+    a = a[:, randperm(size(a,2))]
+    splitall(a, joinpath(dataset_path, "splits"), 20)
 end
 
 function split_movielens(dataset_path = "/data/Work/datasets/movielens/ml-20m")
