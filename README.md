@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/abhijithch/RecSys.jl.png)](https://travis-ci.org/abhijithch/RecSys.jl)
 
 RecSys.jl is an implementation of the ALS-WR algorithm from
-["Yunhong Zhou, Dennis Wilkinson, Robert Schreiber and Rong Pan. Large-Scale Parallel Collaborative Filtering for the Netflix Prize. Proceedings of the 4th international conference on Algorithmic Aspects in Information and Management. Shanghai, China pp. 337-348, 2008"](http://www.hpl.hp.com/personal/Robert_Schreiber/papers/2008%20AAIM%20Netflix/netflix_aaim08(submitted).pdf)
+["Yunhong Zhou, Dennis Wilkinson, Robert Schreiber and Rong Pan. Large-Scale Parallel Collaborative Filtering for the Netflix Prize. Proceedings of the 4th international conference on Algorithmic Aspects in Information and Management. Shanghai, China pp. 337-348, 2008"](http://www.grappa.univ-lille3.fr/~mary/cours/stats/centrale/reco/paper/MatrixFactorizationALS.pdf)
 
 ## Usage
 - Install: `Pkg.clone("https://github.com/abhijithch/RecSys.jl.git")`
