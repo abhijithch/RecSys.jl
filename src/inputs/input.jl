@@ -69,7 +69,7 @@ end
 # Note:
 # Filtering out causes the item and user ids to change.
 # We need to keep a mapping to be able to match in the recommend step.
-function filter_empty(R::RatingMatrix; only_items::Vector{Int64}=Int64[])
+function filter_empty(R::RatingMatrix; only_items=Int64[])
     if !isempty(only_items)
         max_num_items = maximum(only_items)
         if size(R, 2) < max_num_items
@@ -97,7 +97,7 @@ function filter_empty(R::RatingMatrix; only_items::Vector{Int64}=Int64[])
     R, non_empty_items, non_empty_users
 end
 
-function ensure_loaded(inp::SharedMemoryInputs; only_items::Vector{Int64}=Int64[])
+function ensure_loaded(inp::SharedMemoryInputs; only_items=Int64[])
     if isnull(inp.R)
         @logmsg("loading inputs...")
         t1 = time()
