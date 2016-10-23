@@ -7,6 +7,10 @@ import Base: serialize, deserialize, getindex, setindex!, size, append!, flush, 
 
 export DenseMatBlobs, SparseMatBlobs, size, getindex, setindex!, serialize, deserialize, save, load, flush, *
 
+if isless(Base.VERSION, v"0.5.0-")
+    view = sub
+end
+
 const BYTES_128MB = 128 * 1024 * 1024
 
 def_cache() = max(BYTES_128MB, floor(Int, Base.Sys.free_memory()/2/nworkers()))
@@ -268,7 +272,7 @@ function *{T1,T2}(A::Matrix{T1}, B::DenseMatBlobs{T2})
     for idx in 1:length(B.splits)
         p = B.splits[idx]
         part, r = load(B, first(p.first))
-        Base.A_mul_B!(sub(res, 1:Rm, r), A, part)
+        Base.A_mul_B!(view(res, 1:Rm, r), A, part)
     end
     res
 end
