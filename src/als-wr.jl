@@ -48,7 +48,7 @@ function update_user(r::UnitRange)
     end
 end
 
-function update_user(u::Int64, model, inp, lambdaI)
+function update_user(u::Int64, model, inp, lambdaI::Float64)
     nzrows, nzvals = items_and_ratings(inp, u)
     Pu = getP(model, nzrows)
     vec = Pu * nzvals
@@ -70,7 +70,7 @@ function update_item(i::Int64)
     update_item(i::Int64, c.model, c.inp, c.lambdaI)
 end
 
-function update_item(i::Int64, model, inp, lambdaI)
+function update_item(i::Int64, model, inp, lambdaI::Float64)
     nzrows, nzvals = users_and_ratings(inp, i)
     Uit = getU(model, nzrows)
     Ui = Uit'
