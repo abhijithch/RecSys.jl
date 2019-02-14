@@ -1,4 +1,4 @@
 name = "RecSys"
-#uuid = "143ad110-3025-11e9-2e0a-7fba0eea7f1d"
+uuid = "143ad110-3025-11e9-2e0a-7fba0eea7f1d"
 authors = ["nkottary <kottarynishanth54@gmail.com>"]
 version = "0.1.0"
