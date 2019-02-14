@@ -1,2 +1,6 @@
+authors = ["Abhijith <abhijithc@gmail.com>"]
+name = "RecSys"
+uuid = "61258d54-3022-11e9-0a8f-37ff55447aa2"
+version = "0.1.0"
+
 [deps]
-Primes = "27ebfcd6-29c5-5fa9-bf4b-fb8fc14df3ae"
